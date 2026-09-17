@@ -22,7 +22,7 @@ def run_flask():
     app_flask.run(host='0.0.0.0', port=port)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("أهلاً بك! أرسل لي رابط فيديو من TikTok أو YouTube وسأقوم بتحميله لك مباشرة.")
+    await update.message.reply_text("أهلاً بك! أرسل لي رابط فيديو وسأقوم بتحميله لك بأعلى جودة.")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text.strip()
@@ -30,14 +30,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("يرجى إرسال رابط صحيح.")
         return
     
-    status_msg = await update.message.reply_text("جاري تحميل الفيديو، يرجى الانتظار...")
+    status_msg = await update.message.reply_text("جاري تحميل الفيديو بأعلى جودة، يرجى الانتظار...")
     
     try:
-        # تشغيل عملية التحميل في المسار الخلفي لتفادي تجميد البوت
+        # التنزيل في الخلفية لمنع التعليق
         file_path = await asyncio.to_thread(download_media, url)
         
         with open(file_path, 'rb') as video:
-            await update.message.reply_video(video=video)
+            await update.message.reply_video(video=video, supports_streaming=True)
             
         await status_msg.delete()
         if os.path.exists(file_path):
@@ -48,7 +48,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     if not TOKEN:
-        print("خطأ: لم يتم العثور على TELEGRAM_BOT_TOKEN في متغيرات البيئة!")
+        print("خطأ: لم يتم العثور على TELEGRAM_BOT_TOKEN!")
         return
 
     threading.Thread(target=run_flask, daemon=True).start()
