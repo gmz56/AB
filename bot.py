@@ -1,6 +1,7 @@
 import os
 import logging
 import threading
+import asyncio
 from flask import Flask
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -32,14 +33,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status_msg = await update.message.reply_text("جاري تحميل الفيديو، يرجى الانتظار...")
     
     try:
-        file_path = download_media(url)
+        # تشغيل عملية التحميل في المسار الخلفي لتفادي تجميد البوت
+        file_path = await asyncio.to_thread(download_media, url)
+        
         with open(file_path, 'rb') as video:
             await update.message.reply_video(video=video)
+            
         await status_msg.delete()
         if os.path.exists(file_path):
             os.remove(file_path)
     except Exception as e:
-        logging.error(f"Error: {e}")
+        logging.error(f"Error downloading video: {e}")
         await status_msg.edit_text("حدث خطأ أثناء تحميل الفيديو. تأكد من صحة الرابط وحاول مرة أخرى.")
 
 def main():
