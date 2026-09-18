@@ -8,9 +8,9 @@ def download_media(url, progress_callback=None):
 
     def my_hook(d):
         if d['status'] == 'downloading' and progress_callback:
-            total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+            total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate')
             downloaded = d.get('downloaded_bytes', 0)
-            if total_bytes > 0:
+            if total_bytes and total_bytes > 0:
                 percent = (downloaded / total_bytes) * 100
                 speed = d.get('_speed_str', 'N/A')
                 progress_callback(percent, speed)
@@ -21,6 +21,7 @@ def download_media(url, progress_callback=None):
         'progress_hooks': [my_hook] if progress_callback else [],
         'quiet': True,
         'no_warnings': True,
+        'cookiefile': 'cookies.txt',
     }
 
     os.makedirs('downloads', exist_ok=True)
