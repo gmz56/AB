@@ -22,6 +22,17 @@ def download_media(url, progress_callback=None):
         'quiet': True,
         'no_warnings': True,
         'cookiefile': 'cookies.txt',
+        # إعدادات تخطي حظر السيرفرات والبوتات
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web'],
+                'skip': ['hls', 'dash']
+            }
+        },
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+        }
     }
 
     os.makedirs('downloads', exist_ok=True)
