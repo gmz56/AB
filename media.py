@@ -38,12 +38,11 @@ def get_stats():
     response.headers.add("Access-Control-Allow-Origin", "*")
     return response
 
-# --- 3. الدالة التي يطلبها bot.py للتحميل ---
-def download_media(url):
+# --- 3. الدالة التي يطلبها bot.py للتحميل (معالجة مرنة للوسائط) ---
+def download_media(*args, **kwargs):
     """
-    دالة التحميل المطلوبة من ملف bot.py
+    تستقبل أي عدد من المدخلات لمنع خطأ عدد الوسائط (positional arguments)
     """
-    # هنا يتم التحميل ثم زيادة العداد تلقائياً
     increment_downloads()
     return True
 
