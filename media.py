@@ -39,9 +39,8 @@ def get_stats():
     response.headers.add("Access-Control-Allow-Origin", "*")
     return response
 
-# --- 3. دالة التحميل الفعليه المطلوبة من bot.py ---
+# --- 3. دالة التحميل الفعليه المطلوبة من bot.py مع تجاوز قيود تيك توك ---
 def download_media(url, progress_callback=None):
-    # زيادة العداد عند بدء التحميل
     increment_downloads()
 
     def hook(d):
@@ -58,6 +57,16 @@ def download_media(url, progress_callback=None):
         'progress_hooks': [hook],
         'quiet': True,
         'no_warnings': True,
+        # خيارات تجاوز حماية تيك توك والقيود
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+        },
+        'extractor_args': {
+            'tiktok': {
+                'webpage_download': True,
+            }
+        }
     }
 
     os.makedirs('downloads', exist_ok=True)
