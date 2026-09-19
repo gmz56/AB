@@ -5,7 +5,7 @@ from flask import Flask, jsonify
 app = Flask(__name__)
 STATS_FILE = "stats.json"
 
-# --- 1. إدارة العداد والإحصائيات بشكل آمن ---
+# --- 1. إدارة العداد والإحصائيات بشكل آمن وبسيط ---
 def load_stats():
     if not os.path.exists(STATS_FILE):
         return 0
@@ -22,8 +22,6 @@ def increment_downloads():
     try:
         with open(STATS_FILE, "w", encoding="utf-8") as f:
             json.dump({"downloads": current_count}, f)
-            f.flush()
-            os.fsync(f.fileno())
     except Exception as e:
         print(f"Error saving stats: {e}")
     return current_count
