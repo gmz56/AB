@@ -1,6 +1,6 @@
 import os
 import json
-import sys
+import yt_dlp
 from flask import Flask, jsonify
 
 app = Flask(__name__)
@@ -25,7 +25,7 @@ def increment_downloads():
         print(f"Error saving stats: {e}")
     return current_count
 
-# --- 2. مسارات الويب للموقع ---
+# --- 2. مسارات الويب للموقع والعداد ---
 @app.route('/')
 def home():
     return "Bot Server is Running!"
@@ -39,20 +39,33 @@ def get_stats():
     response.headers.add("Access-Control-Allow-Origin", "*")
     return response
 
-# --- 3. دالة التحميل مع معالجة حماية المخرجات ---
-def download_media(*args, **kwargs):
-    try:
-        # إصلاح وتوجيه المخرجات القياسية لمنع خطأ Errno 9 في Render
-        if sys.stdout is None or sys.stdout.closed or sys.stdout.fileno() < 0:
-            sys.stdout = open(os.devnull, 'w')
-        if sys.stderr is None or sys.stderr.closed or sys.stderr.fileno() < 0:
-            sys.stderr = open(os.devnull, 'w')
-    except Exception:
-        pass
-
-    # زيادة العداد عند طلب التحميل
+# --- 3. دالة التحميل الفعليه المطلوبة من bot.py ---
+def download_media(url, progress_callback=None):
+    # زيادة العداد عند بدء التحميل
     increment_downloads()
-    return True
+
+    def hook(d):
+        if d['status'] == 'downloading' and progress_callback:
+            total = d.get('total_bytes') or d.get('total_bytes_estimate') or 0
+            downloaded = d.get('downloaded_bytes', 0)
+            percent = (downloaded / total * 100) if total > 0 else 0
+            speed = d.get('_speed_str', 'N/A')
+            progress_callback(percent, speed)
+
+    ydl_opts = {
+        'format': 'best',
+        'outtmpl': 'downloads/%(id)s.%(ext)s',
+        'progress_hooks': [hook],
+        'quiet': True,
+        'no_warnings': True,
+    }
+
+    os.makedirs('downloads', exist_ok=True)
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        filename = ydl.prepare_filename(info)
+        return filename
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
