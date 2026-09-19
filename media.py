@@ -1,20 +1,19 @@
 import os
 import json
+import sys
 from flask import Flask, jsonify
 
 app = Flask(__name__)
 STATS_FILE = "stats.json"
 
-# --- 1. إدارة العداد والإحصائيات بشكل آمن وبسيط ---
+# --- 1. إدارة العداد والإحصائيات ---
 def load_stats():
     if not os.path.exists(STATS_FILE):
         return 0
     try:
         with open(STATS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return data.get("downloads", 0)
-    except Exception as e:
-        print(f"Error reading stats: {e}")
+            return json.load(f).get("downloads", 0)
+    except Exception:
         return 0
 
 def increment_downloads():
@@ -40,8 +39,18 @@ def get_stats():
     response.headers.add("Access-Control-Allow-Origin", "*")
     return response
 
-# --- 3. الدالة التي يطلبها bot.py للتحميل ---
+# --- 3. دالة التحميل مع معالجة حماية المخرجات ---
 def download_media(*args, **kwargs):
+    try:
+        # إصلاح وتوجيه المخرجات القياسية لمنع خطأ Errno 9 في Render
+        if sys.stdout is None or sys.stdout.closed or sys.stdout.fileno() < 0:
+            sys.stdout = open(os.devnull, 'w')
+        if sys.stderr is None or sys.stderr.closed or sys.stderr.fileno() < 0:
+            sys.stderr = open(os.devnull, 'w')
+    except Exception:
+        pass
+
+    # زيادة العداد عند طلب التحميل
     increment_downloads()
     return True
 
