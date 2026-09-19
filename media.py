@@ -5,21 +5,25 @@ from flask import Flask, jsonify
 app = Flask(__name__)
 STATS_FILE = "stats.json"
 
-# --- 1. إدارة العداد والإحصائيات ---
+# --- 1. إدارة العداد والإحصائيات بشكل آمن ---
 def load_stats():
-    if os.path.exists(STATS_FILE):
-        try:
-            with open(STATS_FILE, "r") as f:
-                return json.load(f).get("downloads", 0)
-        except Exception:
-            return 0
-    return 0
+    if not os.path.exists(STATS_FILE):
+        return 0
+    try:
+        with open(STATS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data.get("downloads", 0)
+    except Exception as e:
+        print(f"Error reading stats: {e}")
+        return 0
 
 def increment_downloads():
     current_count = load_stats() + 1
     try:
-        with open(STATS_FILE, "w") as f:
+        with open(STATS_FILE, "w", encoding="utf-8") as f:
             json.dump({"downloads": current_count}, f)
+            f.flush()
+            os.fsync(f.fileno())
     except Exception as e:
         print(f"Error saving stats: {e}")
     return current_count
@@ -38,14 +42,10 @@ def get_stats():
     response.headers.add("Access-Control-Allow-Origin", "*")
     return response
 
-# --- 3. الدالة التي يطلبها bot.py للتحميل (معالجة مرنة للوسائط) ---
+# --- 3. الدالة التي يطلبها bot.py للتحميل ---
 def download_media(*args, **kwargs):
-    """
-    تستقبل أي عدد من المدخلات لمنع خطأ عدد الوسائط (positional arguments)
-    """
     increment_downloads()
     return True
-
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
