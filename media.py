@@ -1,43 +1,61 @@
 import os
-import uuid
-import yt_dlp
+import json
+from flask import Flask, jsonify, request
 
-def download_media(url, progress_callback=None):
-    unique_id = str(uuid.uuid4())[:8]
-    output_template = f"downloads/{unique_id}_%(title)s.%(ext)s"
+app = Flask(__name__)
 
-    def my_hook(d):
-        if d['status'] == 'downloading' and progress_callback:
-            total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate')
-            downloaded = d.get('downloaded_bytes', 0)
-            if total_bytes and total_bytes > 0:
-                percent = (downloaded / total_bytes) * 100
-                speed = d.get('_speed_str', 'N/A')
-                progress_callback(percent, speed)
+STATS_FILE = "stats.json"
 
-    ydl_opts = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-        'outtmpl': output_template,
-        'progress_hooks': [my_hook] if progress_callback else [],
-        'quiet': True,
-        'no_warnings': True,
-        'cookiefile': 'cookies.txt',
-        # إعدادات تخطي حظر السيرفرات والبوتات
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'web'],
-                'skip': ['hls', 'dash']
-            }
-        },
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9',
-        }
-    }
+# --- دالة قراءة الإحصائيات من الملف المحلي ---
+def load_stats():
+    if os.path.exists(STATS_FILE):
+        try:
+            with open(STATS_FILE, "r") as f:
+                data = json.load(f)
+                return data.get("downloads", 0)
+        except Exception:
+            return 0
+    return 0
 
-    os.makedirs('downloads', exist_ok=True)
+# --- دالة زيادة العداد عند كل عملية تحميل ناجحة ---
+def increment_downloads():
+    current_count = load_stats() + 1
+    try:
+        with open(STATS_FILE, "w") as f:
+            json.dump({"downloads": current_count}, f)
+    except Exception as e:
+        print(f"Error saving stats: {e}")
+    return current_count
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        filename = ydl.prepare_filename(info)
-        return filename
+# --- مسارات Flask الأساسية ---
+
+@app.route('/')
+def home():
+    return "Bot Server is Running!"
+
+# مسار العداد المخصص لربطه بالموقع الإلكتروني
+@app.route('/stats', methods=['GET'])
+def get_stats():
+    return jsonify({
+        "status": "online",
+        "downloads": load_stats()
+    })
+
+# --- معالجة منطق التنزيل والإرسال للبوت ---
+def handle_download_and_send(chat_id, media_url):
+    """
+    ضع منطق التحميل الخاص بك هنا (تنزيل مقطع التيك توك أو الانستقرام)
+    """
+    # مثال لتنفيذ العملية:
+    success = True  # افتراض نجاح عملية التحميل وإرسال الفيديو للمستخدم
+    
+    if success:
+        # زيادة العداد تلقائياً بمقدار 1 عند كل تحميل ناجح
+        increment_downloads()
+        return True
+    return False
+
+if __name__ == '__main__':
+    # تشغيل الخادم
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
