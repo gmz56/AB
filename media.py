@@ -1,9 +1,9 @@
 import os
 import json
-import threading
+import logging
 from flask import Flask, jsonify
 
-# --- 1. خادم Flask والإحصائيات ---
+# إعداد خادم Flask
 app = Flask(__name__)
 STATS_FILE = "stats.json"
 
@@ -31,14 +31,11 @@ def home():
 
 @app.route('/stats', methods=['GET'])
 def get_stats():
-    return jsonify({"status": "online", "downloads": load_stats()})
+    return jsonify({
+        "status": "online",
+        "downloads": load_stats()
+    })
 
-def run_flask():
+if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
-
-# تشغيل سيرفر Flask في الخلفية لكي لا يعطل البوت
-threading.Thread(target=run_flask, daemon=True).start()
-
-# --- 2. كود البوت الخاص بك يبدأ من هنا ---
-# أضف دالة increment_downloads() بعد أي عملية إرسال فيديو ناجحة للمستخدم
