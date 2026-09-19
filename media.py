@@ -1,9 +1,7 @@
 import os
 import json
-import logging
 from flask import Flask, jsonify
 
-# إعداد خادم Flask
 app = Flask(__name__)
 STATS_FILE = "stats.json"
 
@@ -31,10 +29,12 @@ def home():
 
 @app.route('/stats', methods=['GET'])
 def get_stats():
-    return jsonify({
+    response = jsonify({
         "status": "online",
         "downloads": load_stats()
     })
+    response.headers.add("Access-Control-Allow-Origin", "*")
+    return response
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
