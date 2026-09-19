@@ -1,11 +1,9 @@
 import os
 import json
-import logging
+import threading
 from flask import Flask, jsonify
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-# --- إعداد خادم Flask ---
+# --- 1. خادم Flask والإحصائيات ---
 app = Flask(__name__)
 STATS_FILE = "stats.json"
 
@@ -35,23 +33,12 @@ def home():
 def get_stats():
     return jsonify({"status": "online", "downloads": load_stats()})
 
-
-# --- أوامر ووظائف تليجرام للبوت ---
-TOKEN = os.environ.get("BOT_TOKEN", "ضع_توكن_البوت_هنا_إن_لم_يكن_في_المتغيرات")
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("أهلاً بك في بوت سلنقح للتحميل السريع!")
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    url = update.message.text
-    # هنا يتم التحميل وإرسال الفيديو للمستخدم
-    await update.message.reply_text("جاري التحميل...")
-    
-    # زيادة العداد عند إتمام التحميل
-    increment_downloads()
-
-
-if __name__ == '__main__':
-    # تشغيل سيرفر Flask للبوت
+def run_flask():
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
+
+# تشغيل سيرفر Flask في الخلفية لكي لا يعطل البوت
+threading.Thread(target=run_flask, daemon=True).start()
+
+# --- 2. كود البوت الخاص بك يبدأ من هنا ---
+# أضف دالة increment_downloads() بعد أي عملية إرسال فيديو ناجحة للمستخدم
