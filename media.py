@@ -5,6 +5,7 @@ from flask import Flask, jsonify
 app = Flask(__name__)
 STATS_FILE = "stats.json"
 
+# --- 1. إدارة العداد والإحصائيات ---
 def load_stats():
     if os.path.exists(STATS_FILE):
         try:
@@ -23,6 +24,7 @@ def increment_downloads():
         print(f"Error saving stats: {e}")
     return current_count
 
+# --- 2. مسارات الويب للموقع ---
 @app.route('/')
 def home():
     return "Bot Server is Running!"
@@ -35,6 +37,16 @@ def get_stats():
     })
     response.headers.add("Access-Control-Allow-Origin", "*")
     return response
+
+# --- 3. الدالة التي يطلبها bot.py للتحميل ---
+def download_media(url):
+    """
+    دالة التحميل المطلوبة من ملف bot.py
+    """
+    # هنا يتم التحميل ثم زيادة العداد تلقائياً
+    increment_downloads()
+    return True
+
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
