@@ -34,31 +34,7 @@ def increment_stats():
         json.dump(stats, f)
     return stats["downloads"]
 
-def fast_tiktok_download(url):
-    """تحميل سريع ومباشر للتيك توك عبر API بدون حواف سوداء"""
-    try:
-        api_url = f"https://api.tiklydown.eu.org/api/download?url={url}"
-        res = requests.get(api_url, timeout=5).json()
-        video_url = res.get('video', {}).get('noWatermark') or res.get('video', {}).get('watermark')
-        if video_url:
-            os.makedirs('downloads', exist_ok=True)
-            filename = f"downloads/tiktok_{os.urandom(4).hex()}.mp4"
-            v_res = requests.get(video_url, timeout=10)
-            with open(filename, 'wb') as f:
-                f.write(v_res.content)
-            increment_stats()
-            return filename
-    except Exception as e:
-        logger.error(f"Fast TikTok Download Error: {e}")
-    return None
-
 def download_media(url, format_type="video_best"):
-    # إذا كان الرابط تيك توك ومطلوب فيديو، استخدم المسرّع المباشر
-    if "tiktok.com" in url and format_type != "audio_only":
-        fast_file = fast_tiktok_download(url)
-        if fast_file:
-            return fast_file
-
     increment_stats()
     output_template = 'downloads/%(id)s.%(ext)s'
     os.makedirs('downloads', exist_ok=True)
@@ -80,7 +56,8 @@ def download_media(url, format_type="video_best"):
     elif format_type == "video_low":
         ydl_opts['format'] = 'worst[ext=mp4]/worst'
     else:
-        ydl_opts['format'] = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
+        # جودة فيديو وصوت سلسة متوافقة تماماً لمنع أي تقطيع
+        ydl_opts['format'] = 'best[ext=mp4]/best'
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
@@ -226,16 +203,14 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if fmt_type == "audio_only":
                     await context.bot.send_audio(chat_id=query.message.chat_id, audio=f)
                 else:
-                    # هنا التعديل لضمان عرض الفيديو بطول الشاشة الكاملة وبدون حواف سوداء (9:16)
+                    # إرسال الفيديو بسلاسة وتدفّق مباشر مع الحفاظ على سرعته وجودته الأصلية
                     await context.bot.send_video(
                         chat_id=query.message.chat_id,
                         video=f,
-                        supports_streaming=True,
-                        width=720,
-                        height=1280
+                        supports_streaming=True
                     )
 
-        await query.message.reply_text("✅ **تم التحميل بنجاح خارق!**")
+        await query.message.reply_text("✅ **تم التحميل بنجاح!**")
 
     except Exception as e:
         logger.error(f"Telegram Error: {e}")
