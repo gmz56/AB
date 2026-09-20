@@ -1,13 +1,19 @@
 import os
 import logging
+from threading import Thread
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
-from media import download_media
+from media import download_media, app as flask_app
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# تخزين مؤقت للروابط
+# --- تشغيل موقع الويب في الخلفية ---
+def run_flask_site():
+    port = int(os.environ.get("PORT", 5000))
+    flask_app.run(host='0.0.0.0', port=port, use_reloader=False)
+
+# تخزين مؤقت لروابط المستخدمين
 user_urls = {}
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -29,6 +35,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_urls[user_id] = url
 
+    # الميزة 1: أزرار تفاعلية لاختيار الجودة
     keyboard = [
         [InlineKeyboardButton("🎬 فيديو أعلى جودة", callback_data="video_best")],
         [InlineKeyboardButton("📱 فيديو جودة متوسطة", callback_data="video_low")],
@@ -53,8 +60,10 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     file_result = None
     try:
+        # الميزة 2: تنزيل من منصات إضافية وسناب شات
         file_result = download_media(url, format_type=fmt_type)
 
+        # الميزة 4: معالجة ألبوم الصور
         if isinstance(file_result, list):
             await query.message.reply_text(f"📸 جاري رفع ألبوم يحتوي على {len(file_result)} صورة...")
             media_group = []
@@ -72,6 +81,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     await context.bot.send_video(chat_id=query.message.chat_id, video=f, supports_streaming=True)
 
+        # الميزة 5: زر مشاركة البوت مباشرة
         share_kb = [[InlineKeyboardButton("🔗 مشاركة البوت مع صديق", switch_inline_query="جرب هذا البوت الممتاز للتحميل!")]]
         await query.message.reply_text("🎉 تم التحميل بنجاح!", reply_markup=InlineKeyboardMarkup(share_kb))
 
@@ -86,6 +96,11 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.remove(file_result)
 
 def main():
+    # تشغيل موقع الويب في خيط مستقل (Thread)
+    server_thread = Thread(target=run_flask_site)
+    server_thread.daemon = True
+    server_thread.start()
+
     TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
     if not TOKEN:
         raise ValueError("TELEGRAM_BOT_TOKEN غير متوفر!")
