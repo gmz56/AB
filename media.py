@@ -1,10 +1,100 @@
 import os
 import json
 import yt_dlp
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template_string, request, send_file, after_this_request
 
 app = Flask(__name__)
 STATS_FILE = "stats.json"
+
+# --- تصميم واجهة المستخدم (HTML) ---
+HTML_LAYOUT = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مُحمّل الفيديوهات السريع</title>
+    <style>
+        * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+        body { background: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
+        .card { background: #1e293b; padding: 30px; border-radius: 16px; width: 100%; max-width: 500px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center; }
+        h1 { margin-bottom: 10px; font-size: 24px; color: #38bdf8; }
+        .stats-badge { background: #0284c7; color: #fff; padding: 6px 14px; border-radius: 20px; font-size: 14px; display: inline-block; margin-bottom: 20px; }
+        input[type="text"] { width: 100%; padding: 14px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #fff; font-size: 16px; margin-bottom: 16px; outline: none; }
+        input[type="text"]:focus { border-color: #38bdf8; }
+        button { width: 100%; padding: 14px; border-radius: 8px; border: none; background: #0284c7; color: #fff; font-size: 16px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
+        button:hover { background: #0369a1; }
+        button:disabled { background: #475569; cursor: not-allowed; }
+        #status { margin-top: 20px; font-size: 14px; color: #94a3b8; line-height: 1.5; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🚀 مُحمّل الفيديوهات</h1>
+        <div class="stats-badge">إجمالي التحميلات: <span id="count">...</span></div>
+        <input type="text" id="videoUrl" placeholder="أدخل رابط الفيديو (تيك توك، يوتيوب، إنستغرام...)" />
+        <button id="downloadBtn" onclick="startDownload()">تحميل الفيديو</button>
+        <div id="status"></div>
+    </div>
+
+    <script>
+        // جلب عدد التحميلات عند فتح الصفحة
+        async function fetchStats() {
+            try {
+                const res = await fetch('/stats');
+                const data = await res.json();
+                document.getElementById('count').innerText = data.downloads || 0;
+            } catch(e) {}
+        }
+        fetchStats();
+
+        async function startDownload() {
+            const urlInput = document.getElementById('videoUrl');
+            const btn = document.getElementById('downloadBtn');
+            const status = document.getElementById('status');
+            const url = urlInput.value.trim();
+
+            if (!url) {
+                status.innerText = "⚠️ يرجى إدخال الرابط أولاً!";
+                return;
+            }
+
+            btn.disabled = true;
+            status.innerText = "⏳ جاري جلب الفيديو وتجهيزه...";
+
+            try {
+                const response = await fetch('/api/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url })
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json();
+                    throw new Error(errData.error || "فشل التحميل من المصدر");
+                }
+
+                status.innerText = "✅ جاري تنزيل الملف إلى جهازك...";
+                const blob = await response.blob();
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = "video.mp4";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                status.innerText = "🎉 تم التحميل بنجاح!";
+                fetchStats(); // تحديث العداد
+            } catch (err) {
+                status.innerText = "❌ حدث خطأ: " + err.message;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
+"""
 
 # --- 1. إدارة العداد والإحصائيات ---
 def load_stats():
@@ -25,10 +115,10 @@ def increment_downloads():
         print(f"Error saving stats: {e}")
     return current_count
 
-# --- 2. مسارات الويب للموقع والعداد ---
+# --- 2. مسارات الويب والموقع ---
 @app.route('/')
 def home():
-    return "Bot Server is Running!"
+    return render_template_string(HTML_LAYOUT)
 
 @app.route('/stats', methods=['GET'])
 def get_stats():
@@ -39,7 +129,35 @@ def get_stats():
     response.headers.add("Access-Control-Allow-Origin", "*")
     return response
 
-# --- 3. دالة التحميل الفعليه المطلوبة من bot.py مع تجاوز قيود تيك توك ---
+@app.route('/api/download', methods=['POST'])
+def web_download():
+    data = request.get_json() or {}
+    url = data.get('url', '').strip()
+    
+    if not url:
+        return jsonify({"error": "الرابط مطلوب"}), 400
+
+    try:
+        file_path = download_media(url)
+        
+        if not file_path or not os.path.exists(file_path):
+            return jsonify({"error": "فشل حفظ الملف على السيرفر"}), 500
+
+        @after_this_request
+        def remove_file(response):
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception:
+                pass
+            return response
+
+        return send_file(file_path, as_attachment=True)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# --- 3. دالة التحميل الفعليه المطلوبة من bot.py وويب ---
 def download_media(url, progress_callback=None):
     increment_downloads()
 
@@ -57,17 +175,13 @@ def download_media(url, progress_callback=None):
         'progress_hooks': [hook],
         'quiet': True,
         'no_warnings': True,
-        # خيارات تجاوز حماية تيك توك والقيود
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9',
-        },
-        'extractor_args': {
-            'tiktok': {
-                'webpage_download': True,
-            }
         }
     }
+
+    if os.path.exists("cookies.txt"):
+        ydl_opts['cookiefile'] = "cookies.txt"
 
     os.makedirs('downloads', exist_ok=True)
 
