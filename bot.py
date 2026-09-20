@@ -42,7 +42,6 @@ def download_media(url, format_type="video_best"):
         'outtmpl': output_template,
         'quiet': True,
         'no_warnings': True,
-        'concurrent_fragment_downloads': 1,
     }
 
     if format_type == "audio_only":
@@ -53,8 +52,8 @@ def download_media(url, format_type="video_best"):
             'preferredquality': '192',
         }]
     else:
-        # جلب أجهز وأسرع فيديو متوافق دون إعادة ترميز لمنع أي تأخير في الصوت أو الفيديو
-        ydl_opts['format'] = 'best[ext=mp4][vcodec^=avc1]/best[ext=mp4]/b/best'
+        # الكود القديم: جلب الفيديو المباشر المدمج فوراً بدون إعادة معالجة
+        ydl_opts['format'] = 'b/best'
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
@@ -85,12 +84,12 @@ HTML_TEMPLATE = """
 </head>
 <body>
 <div class="card">
-    <h1>🚀 التحميل المباشر السريع ⚡️</h1>
-    <p>تحميل بدون تأخير أو اختلاف بين الصوت والصورة 🎬🎵</p>
+    <h1>🚀 التحميل المباشر ⚡️</h1>
+    <p>تحميل سريع ومباشر 🎬🎵</p>
     <input type="url" id="url" placeholder="أدخل الرابط هنا...">
     <select id="fmt">
-        <option value="video_best">🎬 فيديو مباشر متزامن (100%)</option>
-        <option value="audio_only">🎵 صوت فقط (MP3 192k)</option>
+        <option value="video_best">🎬 فيديو مباشر</option>
+        <option value="audio_only">🎵 صوت فقط (MP3)</option>
     </select>
     <button onclick="dl()">⚡️ تحميل</button>
 </div>
@@ -103,7 +102,7 @@ function dl(){
     .then(r=>r.blob()).then(b=>{
         const a = document.createElement('a');
         a.href = URL.createObjectURL(b);
-        a.download = "fast_video";
+        a.download = "video";
         a.click();
     });
 }
@@ -138,7 +137,7 @@ def run_flask_site():
 user_urls = {}
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    welcome_text = "أهلاً بك! أرسل لي أي رابط وسأقوم بتحميله مباشرة وبدون أي تأخير بين الصوت والصورة ⚡️🎬🎵"
+    welcome_text = "أهلاً بك! أرسل لي أي رابط وسأقوم بتحميله لك فوراً ⚡️"
     keyboard = [
         [InlineKeyboardButton("🔍 جرب التحميل السريع", switch_inline_query="")],
         [InlineKeyboardButton("🌐 المنصة الإلكترونية", url="https://ab-rbx9.onrender.com")]
@@ -156,8 +155,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_urls[user_id] = url
 
     keyboard = [
-        [InlineKeyboardButton("⚡️ تحميل فيديو سريع (بدون تأخير)", callback_data="video_best")],
-        [InlineKeyboardButton("🎵 تحميل صوت فقط (MP3)", callback_data="audio_only")]
+        [InlineKeyboardButton("⚡️ تحميل فيديو مباشر", callback_data="video_best")],
+        [InlineKeyboardButton("🎵 تحميل صوت فقط", callback_data="audio_only")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("⚡️ **اختر الخيار المناسب:**", reply_markup=reply_markup, parse_mode="Markdown")
@@ -174,7 +173,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     fmt_type = query.data
-    await query.edit_message_text("⏳ **جاري التنزيل المباشر المضمون... 🚀**")
+    await query.edit_message_text("⏳ **جاري التنزيل المباشر... 🚀**")
 
     file_result = None
     try:
@@ -190,7 +189,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     supports_streaming=True
                 )
 
-        await query.message.reply_text("✅ **تم التحميل بنجاح وبتزامن كامل! ⚡️**")
+        await query.message.reply_text("✅ **تم التحميل بنجاح! ⚡️**")
 
     except Exception as e:
         logger.error(f"Telegram Error: {e}")
