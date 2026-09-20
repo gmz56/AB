@@ -1,9 +1,8 @@
 import os
 import logging
-from threading import Thread
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
-from media import download_media, run_flask if 'run_flask' in globals() else lambda: None
+from media import download_media
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,7 +29,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_urls[user_id] = url
 
-    # أزرار اختيار الجودة والصوت (اقتراح #1)
     keyboard = [
         [InlineKeyboardButton("🎬 فيديو أعلى جودة", callback_data="video_best")],
         [InlineKeyboardButton("📱 فيديو جودة متوسطة", callback_data="video_low")],
@@ -57,11 +55,10 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         file_result = download_media(url, format_type=fmt_type)
 
-        # التعامل مع ألبوم الصور (اقتراح #4)
         if isinstance(file_result, list):
             await query.message.reply_text(f"📸 جاري رفع ألبوم يحتوي على {len(file_result)} صورة...")
             media_group = []
-            for img_path in file_result[:10]: # حد أقصى 10 صور في الدفعة الواحدة لتليجرام
+            for img_path in file_result[:10]:
                 if os.path.exists(img_path):
                     media_group.append(InputMediaPhoto(open(img_path, 'rb')))
             
@@ -75,7 +72,6 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     await context.bot.send_video(chat_id=query.message.chat_id, video=f, supports_streaming=True)
 
-        # زر المشاركة المباشرة (اقتراح #5)
         share_kb = [[InlineKeyboardButton("🔗 مشاركة البوت مع صديق", switch_inline_query="جرب هذا البوت الممتاز للتحميل!")]]
         await query.message.reply_text("🎉 تم التحميل بنجاح!", reply_markup=InlineKeyboardMarkup(share_kb))
 
@@ -83,7 +79,6 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Telegram Error: {e}")
         await query.message.reply_text(f"❌ حدث خطأ أثناء التحميل: {e}")
     finally:
-        # تنظيف الملفات المؤقتة
         if isinstance(file_result, list):
             for f in file_result:
                 if os.path.exists(f): os.remove(f)
