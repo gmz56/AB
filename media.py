@@ -13,7 +13,7 @@ HTML_LAYOUT = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مُحمّل الفيديوهات السريع</title>
+    <title>مُحمّل الفيديوهات والصور السريع</title>
     <style>
         * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
         body { background: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
@@ -30,15 +30,14 @@ HTML_LAYOUT = """
 </head>
 <body>
     <div class="card">
-        <h1>🚀 مُحمّل الفيديوهات</h1>
+        <h1>🚀 مُحمّل الفيديوهات والصور</h1>
         <div class="stats-badge">إجمالي التحميلات: <span id="count">...</span></div>
-        <input type="text" id="videoUrl" placeholder="أدخل رابط الفيديو (تيك توك، يوتيوب، إنستغرام...)" />
-        <button id="downloadBtn" onclick="startDownload()">تحميل الفيديو</button>
+        <input type="text" id="videoUrl" placeholder="أدخل رابط الفيديو أو ألبوم الصور..." />
+        <button id="downloadBtn" onclick="startDownload()">تحميل المحتوى</button>
         <div id="status"></div>
     </div>
 
     <script>
-        // جلب عدد التحميلات عند فتح الصفحة
         async function fetchStats() {
             try {
                 const res = await fetch('/stats');
@@ -60,7 +59,7 @@ HTML_LAYOUT = """
             }
 
             btn.disabled = true;
-            status.innerText = "⏳ جاري جلب الفيديو وتجهيزه...";
+            status.innerText = "⏳ جاري جلب المحتوى وتجهيزه...";
 
             try {
                 const response = await fetch('/api/download', {
@@ -79,12 +78,12 @@ HTML_LAYOUT = """
                 const downloadUrl = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = downloadUrl;
-                a.download = "video.mp4";
+                a.download = "media_download";
                 document.body.appendChild(a);
                 a.click();
                 a.remove();
                 status.innerText = "🎉 تم التحميل بنجاح!";
-                fetchStats(); // تحديث العداد
+                fetchStats();
             } catch (err) {
                 status.innerText = "❌ حدث خطأ: " + err.message;
             } finally {
@@ -157,7 +156,7 @@ def web_download():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# --- 3. دالة التحميل الفعليه المطلوبة من bot.py وويب ---
+# --- 3. دالة التحميل الفعليه المطلوبة (فيديو + صور) ---
 def download_media(url, progress_callback=None):
     increment_downloads()
 
@@ -170,13 +169,15 @@ def download_media(url, progress_callback=None):
             progress_callback(percent, speed)
 
     ydl_opts = {
-        'format': 'best',
+        'format': 'best/bestvideo+bestaudio',
         'outtmpl': 'downloads/%(id)s.%(ext)s',
         'progress_hooks': [hook],
         'quiet': True,
         'no_warnings': True,
+        'concurrent_fragment_downloads': 5,
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
         }
     }
 
@@ -187,7 +188,13 @@ def download_media(url, progress_callback=None):
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
-        filename = ydl.prepare_filename(info)
+        
+        # في حال كان الرابط ألبوم صور/قائمة عناصر متعددة
+        if 'entries' in info and len(info['entries']) > 0:
+            filename = ydl.prepare_filename(info['entries'][0])
+        else:
+            filename = ydl.prepare_filename(info)
+            
         return filename
 
 if __name__ == '__main__':
