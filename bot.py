@@ -22,7 +22,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• إمكانية المشاركة والتحميل السريع داخل الشاتات (Inline Mode).\n\n"
         "أرسل لي أي رابط الآن وتفرج على الإبداع!"
     )
-    await update.message.reply_text(welcome_text)
+
+    # أزرار تفاعلية عند البداية
+    keyboard = [
+        [InlineKeyboardButton("🔍 جرب التحميل السريع (Inline)", switch_inline_query="")],
+        [InlineKeyboardButton("🌐 زيارة المنصة الإلكترونية", url="https://ab-rbx9.onrender.com")],
+        [InlineKeyboardButton("💡 طريقة الاستخدام", callback_data="how_to_use")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(welcome_text, reply_markup=reply_markup)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text.strip()
@@ -53,6 +61,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
+    # الرد على زر طريقة الاستخدام
+    if query.data == "how_to_use":
+        instructions = (
+            "📖 **طريقة الاستخدام البسيطة:**\n\n"
+            "1️⃣ **التحميل المباشر:** أرسل لي رابط المقطع (تيك توك، يوتيوب، إنستغرام...) مباشرة في المحادثة.\n\n"
+            "2️⃣ **التحميل السريع:** اكتب اسم البوت في أي محادثة ثم ضع الرابط ليتم مشاركته فوراً!"
+        )
+        await query.message.reply_text(instructions, parse_mode="Markdown")
+        return
 
     user_id = query.from_user.id
     url = user_urls.get(user_id)
