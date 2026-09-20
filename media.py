@@ -24,7 +24,6 @@ def increment_stats():
     return stats["downloads"]
 
 def get_media_info(url):
-    """جلب بيانات المعاينة (العنوان، الصورة، المدة)"""
     ydl_opts = {'quiet': True, 'no_warnings': True, 'skip_download': True}
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
@@ -80,7 +79,6 @@ def download_media(url, format_type="video_best"):
                 filename = base + ".mp3"
             return filename
 
-# --- واجهة الموقع الحديثة (Glassmorphic + Preview + Progress Bar) ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -88,20 +86,17 @@ HTML_TEMPLATE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>مُحمّل الميديا الاحترافي 🚀</title>
-
-    <!-- Google Fonts & Font Awesome Icons -->
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
     <style>
         :root {
             --bg-color: #0d1117;
-            --card-bg: rgba(22, 27, 34, 0.75);
+            --card-bg: rgba(22, 27, 34, 0.85);
             --accent-gradient: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
             --button-green: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
             --text-color: #f0f6fc;
             --text-secondary: #8b949e;
-            --border-color: rgba(255, 255, 255, 0.1);
+            --border-color: rgba(255, 255, 255, 0.12);
         }
 
         * { box-sizing: border-box; font-family: 'Tajawal', sans-serif; margin: 0; padding: 0; }
@@ -109,8 +104,8 @@ HTML_TEMPLATE = """
         body {
             background: #090d16;
             background-image: 
-                radial-gradient(at 0% 0%, rgba(79, 172, 254, 0.15) 0px, transparent 50%),
-                radial-gradient(at 100% 100%, rgba(0, 242, 254, 0.15) 0px, transparent 50%);
+                radial-gradient(at 0% 0%, rgba(79, 172, 254, 0.2) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(0, 242, 254, 0.2) 0px, transparent 50%);
             color: var(--text-color);
             min-height: 100vh;
             display: flex;
@@ -121,14 +116,14 @@ HTML_TEMPLATE = """
 
         .container {
             background: var(--card-bg);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border: 1px solid var(--border-color);
             border-radius: 24px;
             padding: 35px 25px;
             width: 100%;
             max-width: 480px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
             text-align: center;
         }
 
@@ -154,7 +149,7 @@ HTML_TEMPLATE = """
         input, select {
             width: 100%;
             padding: 14px 16px;
-            background: rgba(13, 17, 23, 0.8);
+            background: rgba(13, 17, 23, 0.9);
             border: 1px solid var(--border-color);
             border-radius: 12px;
             color: #fff;
@@ -188,10 +183,9 @@ HTML_TEMPLATE = """
         .btn-share { background: var(--button-green); color: #000; }
         .btn:active { transform: scale(0.98); }
 
-        /* Preview Card (المعاينة) */
         .preview-card {
             display: none;
-            background: rgba(0, 0, 0, 0.4);
+            background: rgba(0, 0, 0, 0.5);
             border-radius: 16px;
             padding: 15px;
             margin: 15px 0;
@@ -216,7 +210,6 @@ HTML_TEMPLATE = """
             text-overflow: ellipsis;
         }
 
-        /* Progress Bar (شريط التقدم) */
         .progress-box {
             display: none;
             margin: 15px 0;
@@ -258,7 +251,6 @@ HTML_TEMPLATE = """
         <input type="url" id="media-url" placeholder="أدخل رابط المقطع أو ألبوم الصور..." oninput="fetchPreview()">
     </div>
 
-    <!-- كارت المعاينة -->
     <div class="preview-card" id="preview-box">
         <img id="preview-img" src="" alt="Thumbnail">
         <div class="preview-title" id="preview-title">جاري التجهيز...</div>
@@ -272,7 +264,6 @@ HTML_TEMPLATE = """
         </select>
     </div>
 
-    <!-- شريط التقدم -->
     <div class="progress-box" id="progress-box">
         <div class="progress-bar-bg">
             <div class="progress-bar-fill" id="progress-fill"></div>
