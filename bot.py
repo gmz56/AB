@@ -3,7 +3,7 @@ import logging
 from threading import Thread
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, InlineQueryHandler, filters, ContextTypes
-from media import download_media, get_media_info, app as flask_app
+from media import download_media, app as flask_app
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -16,14 +16,10 @@ user_urls = {}
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
-        "أهلاً بك في بوت التحميل الشامل الذكي! 🚀\n\n"
-        "✨ **الميزات المفعلة:**\n"
-        "• معاينة المقاطع والتحميل مباشرة.\n"
-        "• إمكانية المشاركة والتحميل السريع داخل الشاتات (Inline Mode).\n\n"
-        "أرسل لي أي رابط الآن وتفرج على الإبداع!"
+        "أهلاً بك في بوت التحميل الشامل السريع! ⚡️🚀\n\n"
+        "أرسل لي أي رابط الآن (TikTok, YouTube, Instagram) وسأقوم بتحميله فوراً دون انتظار!"
     )
 
-    # أزرار تفاعلية عند البداية
     keyboard = [
         [InlineKeyboardButton("🔍 جرب التحميل السريع (Inline)", switch_inline_query="")],
         [InlineKeyboardButton("🌐 زيارة المنصة الإلكترونية", url="https://ab-rbx9.onrender.com")],
@@ -41,33 +37,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_urls[user_id] = url
 
-    await update.message.reply_text("🔍 جاري جلب معاينة الرابط...")
-
-    info_text = "اختر الجودة المطلوبة للتحميل:"
-    try:
-        info = get_media_info(url)
-        info_text = f"📌 **{info['title']}**\n👤 الناشر: {info['uploader']}\n\nاختر نوع التحميل:"
-    except:
-        pass
-
+    # خيارات سريعة فورية بدون جلب معاينة بطيئة
     keyboard = [
-        [InlineKeyboardButton("🎬 فيديو أعلى جودة", callback_data="video_best")],
-        [InlineKeyboardButton("📱 فيديو جودة متوسطة", callback_data="video_low")],
-        [InlineKeyboardButton("🎵 صوت فقط (MP3)", callback_data="audio_only")]
+        [InlineKeyboardButton("⚡️ تحميل فيديو مباشر", callback_data="video_best")],
+        [InlineKeyboardButton("🎵 تحميل صوت فقط (MP3)", callback_data="audio_only")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(info_text, reply_markup=reply_markup, parse_mode="Markdown")
+    await update.message.reply_text("⚡️ **اختر طريقة التحميل الفورية:**", reply_markup=reply_markup, parse_mode="Markdown")
 
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    # الرد على زر طريقة الاستخدام
     if query.data == "how_to_use":
         instructions = (
-            "📖 **طريقة الاستخدام البسيطة:**\n\n"
-            "1️⃣ **التحميل المباشر:** أرسل لي رابط المقطع (تيك توك، يوتيوب، إنستغرام...) مباشرة في المحادثة.\n\n"
-            "2️⃣ **التحميل السريع:** اكتب اسم البوت في أي محادثة ثم ضع الرابط ليتم مشاركته فوراً!"
+            "📖 **طريقة الاستخدام السريعة:**\n\n"
+            "فقط أرسل الرابط واختر تحميل مباشر، وسيرسل لك الفيديو في ثوانٍ!"
         )
         await query.message.reply_text(instructions, parse_mode="Markdown")
         return
@@ -80,27 +65,24 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     fmt_type = query.data
-    await query.edit_message_text("⏳ جاري جلب وتحميل المحتوى...")
+    await query.edit_message_text("⏳ **جاري التنزيل والرفع بأقصى سرعة...**")
 
     file_result = None
     try:
         file_result = download_media(url, format_type=fmt_type)
 
         if isinstance(file_result, list):
-            await query.message.reply_text(f"📸 جاري رفع ألبوم يحتوي على {len(file_result)} صورة...")
             media_group = [InputMediaPhoto(open(img, 'rb')) for img in file_result[:10] if os.path.exists(img)]
             if media_group:
                 await context.bot.send_media_group(chat_id=query.message.chat_id, media=media_group)
         else:
-            await query.message.reply_text("📤 جاري رفع الملف إليك...")
             with open(file_result, 'rb') as f:
                 if fmt_type == "audio_only":
                     await context.bot.send_audio(chat_id=query.message.chat_id, audio=f)
                 else:
                     await context.bot.send_video(chat_id=query.message.chat_id, video=f, supports_streaming=True)
 
-        share_kb = [[InlineKeyboardButton("🔗 مشاركة البوت مع صديق", switch_inline_query="جرب هذا البوت الممتاز للتحميل!")]]
-        await query.message.reply_text("🎉 تم التحميل بنجاح!", reply_markup=InlineKeyboardMarkup(share_kb))
+        await query.message.reply_text("✅ **تم التحميل بنجاح خارق!**")
 
     except Exception as e:
         logger.error(f"Telegram Error: {e}")
@@ -121,8 +103,8 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         InlineQueryResultArticle(
             id="1",
             title="رابط تحميل الميديا جاهز 🚀",
-            description="اضغط هنا لإرسال رابط التحميل المباشر للجروب أو الصديق",
-            input_message_content=InputTextMessageContent(f"حمل هذا المقطع فوراً باستخدام البوت عبر الرابط:\n{query}")
+            description="اضغط هنا لإرسال رابط التحميل المباشر",
+            input_message_content=InputTextMessageContent(f"حمل هذا المقطع فوراً عبر البوت:\n{query}")
         )
     ]
     await update.inline_query.answer(results)
