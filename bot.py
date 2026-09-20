@@ -56,8 +56,8 @@ def download_media(url, format_type="video_best"):
     elif format_type == "video_low":
         ydl_opts['format'] = 'worst[ext=mp4]/worst'
     else:
-        # استخراج أقصى جودة فور كي وأفضل جودة صوت وفيديو دون ضغط (4K / Ultra HD)
-        ydl_opts['format'] = 'bestvideo+bestaudio/best'
+        # الحل النهائي: إجبار التحميل بصيغة h264 المتوافقة تماماً مع تليجرام لمنع أي تقطيع
+        ydl_opts['format'] = 'bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/best[vcodec^=avc1]/best[ext=mp4]/best'
         ydl_opts['merge_output_format'] = 'mp4'
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -74,7 +74,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مُحمّل الميديا الخارق 4K ⚡️🤯</title>
+    <title>مُحمّل الميديا السريع ⚡️</title>
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
         body { background: #0d1117; color: #fff; font-family: 'Tajawal', sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
@@ -87,14 +87,14 @@ HTML_TEMPLATE = """
 </head>
 <body>
 <div class="card">
-    <h1>🚀 التحميل السريع بجودة 4K 🤯</h1>
-    <p>أدخل الرابط واحصل على أقصى دقة وفول إتش دي فوراً</p>
+    <h1>🚀 التحميل السريع والسلس ⚡️</h1>
+    <p>أدخل الرابط واحصل على المقطع بأقصى سلاسة جودة فوراً</p>
     <input type="url" id="url" placeholder="أدخل الرابط هنا...">
     <select id="fmt">
-        <option value="video_best">🔥 فيديو خارق 4K Full HD</option>
+        <option value="video_best">🔥 فيديو أعلى جودة وسلس جداً</option>
         <option value="audio_only">🎵 صوت بأعلى نقاء (320Kbps MP3)</option>
     </select>
-    <button onclick="dl()">⚡️ تحميل مجنون فوراً</button>
+    <button onclick="dl()">⚡️ تحميل فوراً</button>
 </div>
 <script>
 function dl(){
@@ -105,7 +105,7 @@ function dl(){
     .then(r=>r.blob()).then(b=>{
         const a = document.createElement('a');
         a.href = URL.createObjectURL(b);
-        a.download = "media_4k";
+        a.download = "media_smooth";
         a.click();
     });
 }
@@ -141,8 +141,8 @@ user_urls = {}
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
-        "أهلاً بك في بوت التحميل المجنون والشامل! ⚡️🤯🔥\n\n"
-        "أرسل لي أي رابط (TikTok, YouTube, Instagram) وسأقوم بتحميله بأعلى جودة 4K وبالمقاس الطولي المثالي!"
+        "أهلاً بك في بوت التحميل السريع والسلس! ⚡️🚀\n\n"
+        "أرسل لي أي رابط (TikTok, YouTube, Instagram) وسأقوم بتحميله بجودة عالية وبدون أي تقطيع!"
     )
 
     keyboard = [
@@ -163,11 +163,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_urls[user_id] = url
 
     keyboard = [
-        [InlineKeyboardButton("🔥 تحميل فيديو 4K Full HD", callback_data="video_best")],
+        [InlineKeyboardButton("⚡️ تحميل فيديو مباشر وسلس", callback_data="video_best")],
         [InlineKeyboardButton("🎵 تحميل صوت بأعلى نقاء (MP3 320k)", callback_data="audio_only")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("⚡️ **اختر الجودة المطلوبة للتحميل:**", reply_markup=reply_markup, parse_mode="Markdown")
+    await update.message.reply_text("⚡️ **اختر نوع التحميل:**", reply_markup=reply_markup, parse_mode="Markdown")
 
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -176,7 +176,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == "how_to_use":
         instructions = (
             "📖 **طريقة الاستخدام السريعة:**\n\n"
-            "فقط أرسل الرابط واختر الجودة الخارقة، وسيرسل لك الفيديو بمقاس الشاشة الطولي وبجودة عالية جداً!"
+            "أرسل الرابط واختر التحميل المباشر ليصلك الفيديو بسلاسة عالية وبدون تقطيع!"
         )
         await query.message.reply_text(instructions, parse_mode="Markdown")
         return
@@ -189,7 +189,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     fmt_type = query.data
-    await query.edit_message_text("⏳ **جاري التنزيل والمعالجة بأعلى جودة 4K... 🚀**")
+    await query.edit_message_text("⏳ **جاري التنزيل والمعالجة بالسلاسة القصوى... 🚀**")
 
     file_result = None
     try:
@@ -210,7 +210,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         supports_streaming=True
                     )
 
-        await query.message.reply_text("✅ **تم التحميل بجودة خارقة ومجنونة! 🤯🔥**")
+        await query.message.reply_text("✅ **تم التحميل بنجاح وسلاسة كاملة! ⚡️**")
 
     except Exception as e:
         logger.error(f"Telegram Error: {e}")
@@ -230,9 +230,9 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     results = [
         InlineQueryResultArticle(
             id="1",
-            title="رابط تحميل الميديا جاهز (4K) 🚀",
+            title="رابط تحميل الميديا جاهز 🚀",
             description="اضغط هنا لإرسال رابط التحميل المباشر",
-            input_message_content=InputTextMessageContent(f"حمل هذا المقطع فوراً بأعلى جودة عبر البوت:\n{query}")
+            input_message_content=InputTextMessageContent(f"حمل هذا المقطع فوراً عبر البوت:\n{query}")
         )
     ]
     await update.inline_query.answer(results)
