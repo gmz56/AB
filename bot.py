@@ -12,7 +12,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # ----------------------------------------------------
-# 1️⃣ قسم سيرفر FLASK والموقع الإلكتروني
+# 1️⃣ قسم سيرفر FLASK والموقع الإلكتروني وحساب الإحصائيات
 # ----------------------------------------------------
 app = Flask(__name__)
 COUNTER_FILE = "stats.json"
@@ -46,15 +46,19 @@ def download_media(url, format_type="video_best"):
     }
 
     if format_type == "audio_only":
+        # ضبط الصوت ليكون مطابقاً لمعايير تيك توك (MP3 - 192kbps - 44100Hz)
         ydl_opts['format'] = 'bestaudio/best'
         ydl_opts['postprocessors'] = [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
-            'preferredquality': '128',
+            'preferredquality': '192',
         }]
+        ydl_opts['postprocessor_args'] = [
+            '-ar', '44100',
+        ]
     else:
-        # أسرع وأخف صيغة مدمجة مباشرة لمنع الإجهاد على RAM وحل التقطيع
-        ydl_opts['format'] = 'b/best'
+        # ضبط الفيديو لاستخراج أفضل جودة فيديو مع ترميز صوت تيك توك الأصلي (AAC) دون تقطيع
+        ydl_opts['format'] = 'best[vcodec^=avc1][acodec^=mp4a]/best[ext=mp4]/b/best'
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
@@ -84,11 +88,11 @@ HTML_TEMPLATE = """
 <body>
 <div class="card">
     <h1>🚀 التحميل المباشر السلس ⚡️</h1>
-    <p>تحميل سريع بدون تقطيع</p>
+    <p>تحميل سريع وفيديو بصوت تيك توك الأصلي 🎬🎵</p>
     <input type="url" id="url" placeholder="أدخل الرابط هنا...">
     <select id="fmt">
-        <option value="video_best">🎬 فيديو مباشر وسلس</option>
-        <option value="audio_only">🎵 صوت (MP3)</option>
+        <option value="video_best">🎬 فيديو سلس بصوت تيك توك الاصلي (AAC)</option>
+        <option value="audio_only">🎵 صوت فقط بنمط تيك توك (MP3 192k)</option>
     </select>
     <button onclick="dl()">⚡️ تحميل</button>
 </div>
@@ -101,7 +105,7 @@ function dl(){
     .then(r=>r.blob()).then(b=>{
         const a = document.createElement('a');
         a.href = URL.createObjectURL(b);
-        a.download = "video";
+        a.download = "tiktok_style_media";
         a.click();
     });
 }
@@ -131,12 +135,12 @@ def run_flask_site():
     app.run(host='0.0.0.0', port=port, use_reloader=False)
 
 # ----------------------------------------------------
-# 2️⃣ قسم بوت تليجرام
+# 2️⃣ قسم بوت تليجرام (Telegram Bot Logic)
 # ----------------------------------------------------
 user_urls = {}
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    welcome_text = "أهلاً بك! أرسل لي أي رابط وسأقوم بتحميله مباشرة وبدون تقطيع ⚡️"
+    welcome_text = "أهلاً بك! أرسل لي أي رابط وسأقوم بتحميل الفيديو والصوت مباشرة وبصوت تيك توك الأصلي السلس ⚡️🎬🎵"
     keyboard = [
         [InlineKeyboardButton("🔍 جرب التحميل السريع", switch_inline_query="")],
         [InlineKeyboardButton("🌐 المنصة الإلكترونية", url="https://ab-rbx9.onrender.com")]
@@ -154,8 +158,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_urls[user_id] = url
 
     keyboard = [
-        [InlineKeyboardButton("⚡️ تحميل فيديو مباشر (بدون تقطيع)", callback_data="video_best")],
-        [InlineKeyboardButton("🎵 تحميل صوت فقط", callback_data="audio_only")]
+        [InlineKeyboardButton("⚡️ تحميل فيديو (صوت وصورة تيك توك)", callback_data="video_best")],
+        [InlineKeyboardButton("🎵 تحميل صوت فقط (MP3 تيك توك)", callback_data="audio_only")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("⚡️ **اختر الخيار المناسب:**", reply_markup=reply_markup, parse_mode="Markdown")
@@ -172,7 +176,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     fmt_type = query.data
-    await query.edit_message_text("⏳ **جاري التنزيل المباشر والسريع... 🚀**")
+    await query.edit_message_text("⏳ **جاري التنزيل المباشر بنمط تيك توك الأصلي... 🚀**")
 
     file_result = None
     try:
@@ -188,7 +192,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     supports_streaming=True
                 )
 
-        await query.message.reply_text("✅ **تم التحميل بنجاح! ⚡️**")
+        await query.message.reply_text("✅ **تم التحميل بنجاح بأعلى سلاسة وبصوت المنصة الأصلي! ⚡️**")
 
     except Exception as e:
         logger.error(f"Telegram Error: {e}")
@@ -211,6 +215,9 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     ]
     await update.inline_query.answer(results)
 
+# ----------------------------------------------------
+# 3️⃣ التشغيل الرئيسي (Main Execution)
+# ----------------------------------------------------
 def main():
     server_thread = Thread(target=run_flask_site)
     server_thread.daemon = True
