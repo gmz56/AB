@@ -141,9 +141,7 @@ user_urls = {}
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
-        "أهلاً بك في بوت التحميل المجنون والشامل! ⚡️🤯🔥
-
-"
+        "أهلاً بك في بوت التحميل المجنون والشامل! ⚡️🤯🔥\n\n"
         "أرسل لي أي رابط (TikTok, YouTube, Instagram) وسأقوم بتحميله بأعلى جودة 4K وبالمقاس الطولي المثالي!"
     )
 
@@ -177,9 +175,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "how_to_use":
         instructions = (
-            "📖 **طريقة الاستخدام السريعة:**
-
-"
+            "📖 **طريقة الاستخدام السريعة:**\n\n"
             "فقط أرسل الرابط واختر الجودة الخارقة، وسيرسل لك الفيديو بمقاس الشاشة الطولي وبجودة عالية جداً!"
         )
         await query.message.reply_text(instructions, parse_mode="Markdown")
@@ -208,7 +204,6 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if fmt_type == "audio_only":
                     await context.bot.send_audio(chat_id=query.message.chat_id, audio=f)
                 else:
-                    # إرسال الفيديو بأبعاد العرض الطولي للتيك توك (9:16) وسلاسة عالية
                     await context.bot.send_video(
                         chat_id=query.message.chat_id,
                         video=f,
@@ -237,8 +232,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             id="1",
             title="رابط تحميل الميديا جاهز (4K) 🚀",
             description="اضغط هنا لإرسال رابط التحميل المباشر",
-            input_message_content=InputTextMessageContent(f"حمل هذا المقطع فوراً بأعلى جودة عبر البوت:
-{query}")
+            input_message_content=InputTextMessageContent(f"حمل هذا المقطع فوراً بأعلى جودة عبر البوت:\n{query}")
         )
     ]
     await update.inline_query.answer(results)
