@@ -17,10 +17,10 @@ user_urls = {}
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
         "أهلاً بك في بوت التحميل الشامل الذكي! 🚀\n\n"
-        "✨ **الميزات الجديدة:**\n"
-        "• معاينة المقطع قبل التحميل.\n"
-        "• إمكانية استخدام البوت داخل أي شات (Inline Mode) بجعل المعاينة سريعة!\n\n"
-        "أرسل لي أي رابط الآن لمشاهدته وتحميله فوراً!"
+        "✨ **الميزات المفعلة:**\n"
+        "• معاينة المقاطع والتحميل مباشرة.\n"
+        "• إمكانية المشاركة والتحميل السريع داخل الشاتات (Inline Mode).\n\n"
+        "أرسل لي أي رابط الآن وتفرج على الإبداع!"
     )
     await update.message.reply_text(welcome_text)
 
@@ -33,9 +33,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_urls[user_id] = url
 
-    await update.message.reply_text("🔍 جاري فحص الرابط ومعاينته...")
+    await update.message.reply_text("🔍 جاري جلب معاينة الرابط...")
 
-    # ميزة المعاينة قبل التحميل
     info_text = "اختر الجودة المطلوبة للتحميل:"
     try:
         info = get_media_info(url)
@@ -95,7 +94,6 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif file_result and os.path.exists(file_result):
             os.remove(file_result)
 
-# --- ميزة وضع التحميل السريع (Inline Mode) ---
 async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.inline_query.query
     if not query or not query.startswith("http"):
