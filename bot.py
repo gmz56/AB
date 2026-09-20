@@ -12,7 +12,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # ----------------------------------------------------
-# 1️⃣ قسم سيرفر FLASK والموقع الإلكتروني وحساب الإحصائيات
+# 1️⃣ قسم سيرفر FLASK والموقع الإلكتروني
 # ----------------------------------------------------
 app = Flask(__name__)
 COUNTER_FILE = "stats.json"
@@ -42,7 +42,7 @@ def download_media(url, format_type="video_best"):
         'outtmpl': output_template,
         'quiet': True,
         'no_warnings': True,
-        'concurrent_fragment_downloads': 5,
+        'concurrent_fragment_downloads': 1,
     }
 
     if format_type == "audio_only":
@@ -50,11 +50,11 @@ def download_media(url, format_type="video_best"):
         ydl_opts['postprocessors'] = [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
-            'preferredquality': '192',
+            'preferredquality': '128',
         }]
     else:
-        # صيغة مضمونة وسلسة جداً 100% متوافقة مع تليجرام لمنع تقطيع الصوت والفيديو
-        ydl_opts['format'] = 'best[ext=mp4][vcodec^=avc1]/best[ext=mp4]/best'
+        # أسرع وأخف صيغة مدمجة مباشرة لمنع الإجهاد على RAM وحل التقطيع
+        ydl_opts['format'] = 'b/best'
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
@@ -70,7 +70,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مُحمّل الميديا السريع والناعم ⚡️</title>
+    <title>مُحمّل الميديا السريع ⚡️</title>
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
         body { background: #0d1117; color: #fff; font-family: 'Tajawal', sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
@@ -83,14 +83,14 @@ HTML_TEMPLATE = """
 </head>
 <body>
 <div class="card">
-    <h1>🚀 التحميل السلس المضمون ⚡️</h1>
-    <p>تحميل سريع وبدون أي تقطيع في الصوت أو الصورة</p>
+    <h1>🚀 التحميل المباشر السلس ⚡️</h1>
+    <p>تحميل سريع بدون تقطيع</p>
     <input type="url" id="url" placeholder="أدخل الرابط هنا...">
     <select id="fmt">
-        <option value="video_best">🎬 فيديو سلس بصوت وصورة ممتازة</option>
-        <option value="audio_only">🎵 صوت نقّي (MP3)</option>
+        <option value="video_best">🎬 فيديو مباشر وسلس</option>
+        <option value="audio_only">🎵 صوت (MP3)</option>
     </select>
-    <button onclick="dl()">⚡️ تحميل مباشر</button>
+    <button onclick="dl()">⚡️ تحميل</button>
 </div>
 <script>
 function dl(){
@@ -101,7 +101,7 @@ function dl(){
     .then(r=>r.blob()).then(b=>{
         const a = document.createElement('a');
         a.href = URL.createObjectURL(b);
-        a.download = "smooth_media";
+        a.download = "video";
         a.click();
     });
 }
@@ -131,20 +131,15 @@ def run_flask_site():
     app.run(host='0.0.0.0', port=port, use_reloader=False)
 
 # ----------------------------------------------------
-# 2️⃣ قسم بوت تليجرام (Telegram Bot Logic)
+# 2️⃣ قسم بوت تليجرام
 # ----------------------------------------------------
 user_urls = {}
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    welcome_text = (
-        "أهلاً بك في بوت التحميل المضمون والسلس! ⚡️🚀\n\n"
-        "أرسل لي أي رابط وسأقوم بتحميله بجودة عالية وبدون تقطيع في الصوت أو الصورة!"
-    )
-
+    welcome_text = "أهلاً بك! أرسل لي أي رابط وسأقوم بتحميله مباشرة وبدون تقطيع ⚡️"
     keyboard = [
-        [InlineKeyboardButton("🔍 جرب التحميل السريع (Inline)", switch_inline_query="")],
-        [InlineKeyboardButton("🌐 زيارة المنصة الإلكترونية", url="https://ab-rbx9.onrender.com")],
-        [InlineKeyboardButton("💡 طريقة الاستخدام", callback_data="how_to_use")]
+        [InlineKeyboardButton("🔍 جرب التحميل السريع", switch_inline_query="")],
+        [InlineKeyboardButton("🌐 المنصة الإلكترونية", url="https://ab-rbx9.onrender.com")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(welcome_text, reply_markup=reply_markup)
@@ -152,70 +147,54 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text.strip()
     if not (url.startswith("http://") or url.startswith("https://")):
-        await update.message.reply_text("الرجاء إرسال رابط صحيح يبتدئ بـ http أو https 🔗")
+        await update.message.reply_text("الرجاء إرسال رابط صحيح 🔗")
         return
 
     user_id = update.effective_user.id
     user_urls[user_id] = url
 
     keyboard = [
-        [InlineKeyboardButton("⚡️ تحميل فيديو مباشر وسلس", callback_data="video_best")],
-        [InlineKeyboardButton("🎵 تحميل صوت فقط (MP3)", callback_data="audio_only")]
+        [InlineKeyboardButton("⚡️ تحميل فيديو مباشر (بدون تقطيع)", callback_data="video_best")],
+        [InlineKeyboardButton("🎵 تحميل صوت فقط", callback_data="audio_only")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("⚡️ **اختر طريقة التحميل:**", reply_markup=reply_markup, parse_mode="Markdown")
+    await update.message.reply_text("⚡️ **اختر الخيار المناسب:**", reply_markup=reply_markup, parse_mode="Markdown")
 
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    if query.data == "how_to_use":
-        instructions = (
-            "📖 **طريقة الاستخدام السريعة:**\n\n"
-            "فقط أرسل الرابط واختر تحميل مباشر، وسيرسل لك الفيديو ناعماً وبسلاسة كاملة!"
-        )
-        await query.message.reply_text(instructions, parse_mode="Markdown")
-        return
-
     user_id = query.from_user.id
     url = user_urls.get(user_id)
 
     if not url:
-        await query.edit_message_text("❌ انتهت الجلسة. يرجى إرسال الرابط من جديد.")
+        await query.edit_message_text("❌ انتهت الجلسة. أرسل الرابط مجدداً.")
         return
 
     fmt_type = query.data
-    await query.edit_message_text("⏳ **جاري التنزيل المباشر بالسلاسة القصوى... 🚀**")
+    await query.edit_message_text("⏳ **جاري التنزيل المباشر والسريع... 🚀**")
 
     file_result = None
     try:
         file_result = download_media(url, format_type=fmt_type)
 
-        if isinstance(file_result, list):
-            media_group = [InputMediaPhoto(open(img, 'rb')) for img in file_result[:10] if os.path.exists(img)]
-            if media_group:
-                await context.bot.send_media_group(chat_id=query.message.chat_id, media=media_group)
-        else:
-            with open(file_result, 'rb') as f:
-                if fmt_type == "audio_only":
-                    await context.bot.send_audio(chat_id=query.message.chat_id, audio=f)
-                else:
-                    await context.bot.send_video(
-                        chat_id=query.message.chat_id,
-                        video=f,
-                        supports_streaming=True
-                    )
+        with open(file_result, 'rb') as f:
+            if fmt_type == "audio_only":
+                await context.bot.send_audio(chat_id=query.message.chat_id, audio=f)
+            else:
+                await context.bot.send_video(
+                    chat_id=query.message.chat_id,
+                    video=f,
+                    supports_streaming=True
+                )
 
-        await query.message.reply_text("✅ **تم التحميل بنجاح وبأعلى سلاسة! ⚡️**")
+        await query.message.reply_text("✅ **تم التحميل بنجاح! ⚡️**")
 
     except Exception as e:
         logger.error(f"Telegram Error: {e}")
-        await query.message.reply_text(f"❌ حدث خطأ أثناء التحميل: {e}")
+        await query.message.reply_text(f"❌ حدث خطأ: {e}")
     finally:
-        if isinstance(file_result, list):
-            for f in file_result:
-                if os.path.exists(f): os.remove(f)
-        elif file_result and os.path.exists(file_result):
+        if file_result and os.path.exists(file_result):
             os.remove(file_result)
 
 async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -226,16 +205,12 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     results = [
         InlineQueryResultArticle(
             id="1",
-            title="رابط تحميل الميديا جاهز 🚀",
-            description="اضغط هنا لإرسال رابط التحميل المباشر",
-            input_message_content=InputTextMessageContent(f"حمل هذا المقطع فوراً عبر البوت:\n{query}")
+            title="رابط التحميل المباشر 🚀",
+            input_message_content=InputTextMessageContent(f"حمل المقطع عبر البوت:\n{query}")
         )
     ]
     await update.inline_query.answer(results)
 
-# ----------------------------------------------------
-# 3️⃣ التشغيل الرئيسي (Main Execution)
-# ----------------------------------------------------
 def main():
     server_thread = Thread(target=run_flask_site)
     server_thread.daemon = True
