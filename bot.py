@@ -4,10 +4,9 @@ import logging
 import yt_dlp
 from threading import Thread
 from flask import Flask, render_template_string, request, jsonify, send_file
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, InlineQueryResultArticle, InputTextMessageContent
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, InlineQueryHandler, filters, ContextTypes
 
-# إعداد السجلات
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -42,27 +41,22 @@ def download_media(url, format_type="video_best"):
         'outtmpl': output_template,
         'quiet': True,
         'no_warnings': True,
+        'format': 'best[ext=mp4]/best' if format_type != "audio_only" else 'bestaudio/best',
     }
 
     if format_type == "audio_only":
-        ydl_opts['format'] = 'bestaudio/best'
         ydl_opts['postprocessors'] = [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
-            'preferredquality': '192',
+            'preferredquality': '128',
         }]
-    else:
-        # الكود القديم: جلب الفيديو المباشر المدمج فوراً بدون إعادة معالجة
-        ydl_opts['format'] = 'b/best'
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         filename = ydl.prepare_filename(info)
-        
         if format_type == "audio_only":
             base, _ = os.path.splitext(filename)
             filename = base + ".mp3"
-            
         return filename
 
 HTML_TEMPLATE = """
@@ -71,38 +65,29 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مُحمّل الميديا السريع ⚡️</title>
-    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+    <title>مُحمّل الميديا ⚡️</title>
     <style>
-        body { background: #0d1117; color: #fff; font-family: 'Tajawal', sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
-        .card { background: #161b22; border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 30px; width: 100%; max-width: 450px; text-align: center; box-shadow: 0 10px 30px rgba(0,242,254,0.15); }
-        input, select, button { width: 100%; padding: 14px; margin-top: 12px; border-radius: 10px; border: none; font-size: 1rem; box-sizing: border-box; }
-        input { background: #0d1117; color: #fff; border: 1px solid #30363d; }
-        button { background: linear-gradient(135deg, #00f2fe, #4facfe); color: #000; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:hover { transform: scale(1.02); }
+        body { background: #0d1117; color: #fff; font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .card { background: #161b22; padding: 30px; border-radius: 15px; text-align: center; width: 90%; max-width: 400px; }
+        input, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 8px; border: none; box-sizing: border-box; }
+        button { background: #00f2fe; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
 <div class="card">
-    <h1>🚀 التحميل المباشر ⚡️</h1>
-    <p>تحميل سريع ومباشر 🎬🎵</p>
-    <input type="url" id="url" placeholder="أدخل الرابط هنا...">
-    <select id="fmt">
-        <option value="video_best">🎬 فيديو مباشر</option>
-        <option value="audio_only">🎵 صوت فقط (MP3)</option>
-    </select>
-    <button onclick="dl()">⚡️ تحميل</button>
+    <h2>🚀 التحميل المباشر ⚡️</h2>
+    <input type="url" id="url" placeholder="ضع الرابط هنا...">
+    <button onclick="dl()">تحميل</button>
 </div>
 <script>
 function dl(){
     const u = document.getElementById('url').value;
-    const f = document.getElementById('fmt').value;
-    if(!u) return alert('ضع رابطاً!');
-    fetch('/download', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url:u, format_type:f})})
+    if(!u) return alert('أدخل رابطاً!');
+    fetch('/download', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url:u, format_type:'video_best'})})
     .then(r=>r.blob()).then(b=>{
         const a = document.createElement('a');
         a.href = URL.createObjectURL(b);
-        a.download = "video";
+        a.download = "video.mp4";
         a.click();
     });
 }
@@ -113,16 +98,13 @@ function dl(){
 
 @app.route('/')
 def home():
-    stats = get_stats()
-    return render_template_string(HTML_TEMPLATE, downloads=stats["downloads"])
+    return render_template_string(HTML_TEMPLATE)
 
 @app.route('/download', methods=['POST'])
 def web_download():
     data = request.get_json()
-    url = data.get('url')
-    fmt = data.get('format_type', 'video_best')
     try:
-        file_path = download_media(url, format_type=fmt)
+        file_path = download_media(data.get('url'), data.get('format_type', 'video_best'))
         return send_file(file_path, as_attachment=True)
     except Exception as e:
         return jsonify({'error': str(e)}), 400
@@ -140,6 +122,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = "أهلاً بك! أرسل لي أي رابط وسأقوم بتحميله لك فوراً ⚡️"
     keyboard = [
         [InlineKeyboardButton("🔍 جرب التحميل السريع", switch_inline_query="")],
+        [InlineKeyboardButton("🧞‍♂️ الجني الأزرق (@WeWillRevise_bot)", url="https://t.me/WeWillRevise_bot")],
         [InlineKeyboardButton("🌐 المنصة الإلكترونية", url="https://ab-rbx9.onrender.com")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -147,89 +130,54 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text.strip()
-    if not (url.startswith("http://") or url.startswith("https://")):
-        await update.message.reply_text("الرجاء إرسال رابط صحيح 🔗")
-        return
-
-    user_id = update.effective_user.id
-    user_urls[user_id] = url
-
+    if not url.startswith("http"):
+        return await update.message.reply_text("أرسل رابطاً صحيحاً 🔗")
+    
+    user_urls[update.effective_user.id] = url
+    
+    # قائمة الأزرار مع إضافة زر الجني الأزرق
     keyboard = [
         [InlineKeyboardButton("⚡️ تحميل فيديو مباشر", callback_data="video_best")],
-        [InlineKeyboardButton("🎵 تحميل صوت فقط", callback_data="audio_only")]
+        [InlineKeyboardButton("🧞‍♂️ الجني الأزرق - @WeWillRevise_bot", url="https://t.me/WeWillRevise_bot")]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("⚡️ **اختر الخيار المناسب:**", reply_markup=reply_markup, parse_mode="Markdown")
+    
+    message_text = (
+        "🎉 **اختر خيار التحميل أو افتح البوت الأخر:**\n\n"
+        "🤖 **@WeWillRevise_bot — الجني الازرق**\n\n"
+        "👇 افتحه الان من الزر ادناه."
+    )
+    
+    await update.message.reply_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
-    user_id = query.from_user.id
-    url = user_urls.get(user_id)
-
+    
+    url = user_urls.get(query.from_user.id)
     if not url:
-        await query.edit_message_text("❌ انتهت الجلسة. أرسل الرابط مجدداً.")
-        return
-
-    fmt_type = query.data
-    await query.edit_message_text("⏳ **جاري التنزيل المباشر... 🚀**")
-
-    file_result = None
+        return await query.edit_message_text("انتهت الجلسة، أرسل الرابط مجدداً.")
+    
+    await query.edit_message_text("⏳ جاري التحميل...")
     try:
-        file_result = download_media(url, format_type=fmt_type)
-
-        with open(file_result, 'rb') as f:
-            if fmt_type == "audio_only":
-                await context.bot.send_audio(chat_id=query.message.chat_id, audio=f)
-            else:
-                await context.bot.send_video(
-                    chat_id=query.message.chat_id,
-                    video=f,
-                    supports_streaming=True
-                )
-
-        await query.message.reply_text("✅ **تم التحميل بنجاح! ⚡️**")
-
+        file_path = download_media(url, query.data)
+        with open(file_path, 'rb') as f:
+            await context.bot.send_video(chat_id=query.message.chat_id, video=f, supports_streaming=True)
+        await query.message.reply_text("✅ تم التحميل بنجاح!")
     except Exception as e:
-        logger.error(f"Telegram Error: {e}")
         await query.message.reply_text(f"❌ حدث خطأ: {e}")
     finally:
-        if file_result and os.path.exists(file_result):
-            os.remove(file_result)
+        if 'file_path' in locals() and os.path.exists(file_path):
+            os.remove(file_path)
 
-async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.inline_query.query
-    if not query or not query.startswith("http"):
-        return
-
-    results = [
-        InlineQueryResultArticle(
-            id="1",
-            title="رابط التحميل المباشر 🚀",
-            input_message_content=InputTextMessageContent(f"حمل المقطع عبر البوت:\n{query}")
-        )
-    ]
-    await update.inline_query.answer(results)
-
-# ----------------------------------------------------
-# 3️⃣ التشغيل الرئيسي (Main Execution)
-# ----------------------------------------------------
 def main():
-    server_thread = Thread(target=run_flask_site)
-    server_thread.daemon = True
-    server_thread.start()
-
+    Thread(target=run_flask_site, daemon=True).start()
     TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-    if not TOKEN:
-        raise ValueError("TELEGRAM_BOT_TOKEN غير متوفر!")
-
+    if not TOKEN: raise ValueError("TELEGRAM_BOT_TOKEN غير متوفر!")
+    
     bot_app = Application.builder().token(TOKEN).build()
     bot_app.add_handler(CommandHandler("start", start_command))
     bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     bot_app.add_handler(CallbackQueryHandler(button_click))
-    bot_app.add_handler(InlineQueryHandler(inline_query_handler))
-    
     bot_app.run_polling()
 
 if __name__ == "__main__":
