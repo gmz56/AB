@@ -46,43 +46,23 @@ def download_media(url, format_type="video_best"):
     }
 
     if format_type == "audio_only":
-        # صوت نقّي بدون تقطيع بنمط تيك توك الأصلي
         ydl_opts['format'] = 'bestaudio/best'
         ydl_opts['postprocessors'] = [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }]
-        ydl_opts['postprocessor_args'] = [
-            '-ar', '44100',
-        ]
     else:
-        # إزالة التبطيء والتقطيع نهائياً عبر ضبط جودة الفيديو وتوحيد معدل الإطارات بترميز H.264 و AAC
-        ydl_opts['format'] = 'bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4]/b/best'
-        ydl_opts['postprocessors'] = [{
-            'key': 'FFmpegVideoConvertor',
-            'preferedformat': 'mp4',
-        }]
-        ydl_opts['postprocessor_args'] = [
-            '-c:v', 'libx264',
-            '-pix_fmt', 'yuv420p',
-            '-preset', 'ultrafast',  # سرعة فائقة لمنع إجهاد السيرفر وحفظ جميع الإطارات
-            '-c:a', 'aac',
-            '-b:a', '192k',
-            '-ar', '44100',
-        ]
+        # جلب أجهز وأسرع فيديو متوافق دون إعادة ترميز لمنع أي تأخير في الصوت أو الفيديو
+        ydl_opts['format'] = 'best[ext=mp4][vcodec^=avc1]/best[ext=mp4]/b/best'
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         filename = ydl.prepare_filename(info)
         
-        # التأكد من الامتداد الصحيح عند التحويل
         if format_type == "audio_only":
             base, _ = os.path.splitext(filename)
             filename = base + ".mp3"
-        else:
-            base, _ = os.path.splitext(filename)
-            filename = base + ".mp4"
             
         return filename
 
@@ -105,12 +85,12 @@ HTML_TEMPLATE = """
 </head>
 <body>
 <div class="card">
-    <h1>🚀 التحميل المباشر الناعم ⚡️</h1>
-    <p>تحميل سريع بدون بطء أو تقطيع في الفيديو 🎬🎵</p>
+    <h1>🚀 التحميل المباشر السريع ⚡️</h1>
+    <p>تحميل بدون تأخير أو اختلاف بين الصوت والصورة 🎬🎵</p>
     <input type="url" id="url" placeholder="أدخل الرابط هنا...">
     <select id="fmt">
-        <option value="video_best">🎬 فيديو سلس بدون تبطيء (H.264 / AAC)</option>
-        <option value="audio_only">🎵 صوت فقط بنمط تيك توك (MP3 192k)</option>
+        <option value="video_best">🎬 فيديو مباشر متزامن (100%)</option>
+        <option value="audio_only">🎵 صوت فقط (MP3 192k)</option>
     </select>
     <button onclick="dl()">⚡️ تحميل</button>
 </div>
@@ -123,7 +103,7 @@ function dl(){
     .then(r=>r.blob()).then(b=>{
         const a = document.createElement('a');
         a.href = URL.createObjectURL(b);
-        a.download = "smooth_video";
+        a.download = "fast_video";
         a.click();
     });
 }
@@ -158,7 +138,7 @@ def run_flask_site():
 user_urls = {}
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    welcome_text = "أهلاً بك! أرسل لي أي رابط وسأقوم بتحميله بسلاسة فائقة وبدون أي تقطيع أو تبطيء في الفيديو ⚡️🎬🎵"
+    welcome_text = "أهلاً بك! أرسل لي أي رابط وسأقوم بتحميله مباشرة وبدون أي تأخير بين الصوت والصورة ⚡️🎬🎵"
     keyboard = [
         [InlineKeyboardButton("🔍 جرب التحميل السريع", switch_inline_query="")],
         [InlineKeyboardButton("🌐 المنصة الإلكترونية", url="https://ab-rbx9.onrender.com")]
@@ -176,8 +156,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_urls[user_id] = url
 
     keyboard = [
-        [InlineKeyboardButton("⚡️ تحميل فيديو سلس (إزالة التبطيء)", callback_data="video_best")],
-        [InlineKeyboardButton("🎵 تحميل صوت فقط (MP3 تيك توك)", callback_data="audio_only")]
+        [InlineKeyboardButton("⚡️ تحميل فيديو سريع (بدون تأخير)", callback_data="video_best")],
+        [InlineKeyboardButton("🎵 تحميل صوت فقط (MP3)", callback_data="audio_only")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("⚡️ **اختر الخيار المناسب:**", reply_markup=reply_markup, parse_mode="Markdown")
@@ -194,7 +174,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     fmt_type = query.data
-    await query.edit_message_text("⏳ **جاري التنزيل والمعالجة لإزالة أي تقطيع... 🚀**")
+    await query.edit_message_text("⏳ **جاري التنزيل المباشر المضمون... 🚀**")
 
     file_result = None
     try:
@@ -210,7 +190,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     supports_streaming=True
                 )
 
-        await query.message.reply_text("✅ **تم التحميل بنجاح بسلاسة كاملة وبدون تبطيء! ⚡️**")
+        await query.message.reply_text("✅ **تم التحميل بنجاح وبتزامن كامل! ⚡️**")
 
     except Exception as e:
         logger.error(f"Telegram Error: {e}")
