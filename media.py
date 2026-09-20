@@ -1,278 +1,405 @@
 import os
+import re
 import json
-import zipfile
 import yt_dlp
-from flask import Flask, jsonify, render_template_string, request, send_file, after_this_request
+from flask import Flask, render_template_string, request, jsonify, send_file
 
 app = Flask(__name__)
-STATS_FILE = "stats.json"
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "123456") # كلمة سر لوحة التحكم
+COUNTER_FILE = "stats.json"
 
-# --- تصميم واجهة المستخدم (HTML) ---
-HTML_LAYOUT = """
+def get_stats():
+    if os.path.exists(COUNTER_FILE):
+        try:
+            with open(COUNTER_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {"downloads": 0}
+
+def increment_stats():
+    stats = get_stats()
+    stats["downloads"] = stats.get("downloads", 0) + 1
+    with open(COUNTER_FILE, 'w') as f:
+        json.dump(stats, f)
+    return stats["downloads"]
+
+def get_media_info(url):
+    """جلب بيانات المعاينة (العنوان، الصورة، المدة)"""
+    ydl_opts = {'quiet': True, 'no_warnings': True, 'skip_download': True}
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+        return {
+            'title': info.get('title', 'محتوى ميديا'),
+            'thumbnail': info.get('thumbnail', ''),
+            'duration': info.get('duration', 0),
+            'uploader': info.get('uploader', 'غير معروف')
+        }
+
+def download_media(url, format_type="video_best"):
+    increment_stats()
+    output_template = 'downloads/%(id)s.%(ext)s'
+    os.makedirs('downloads', exist_ok=True)
+
+    if format_type == "audio_only":
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': output_template,
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'quiet': True,
+        }
+    elif format_type == "video_low":
+        ydl_opts = {
+            'format': 'worstvideo+worstaudio/worst',
+            'outtmpl': output_template,
+            'quiet': True,
+        }
+    else:
+        ydl_opts = {
+            'format': 'bestvideo+bestaudio/best',
+            'outtmpl': output_template,
+            'quiet': True,
+        }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        if 'entries' in info:
+            images = []
+            for entry in info['entries']:
+                filename = ydl.prepare_filename(entry)
+                if os.path.exists(filename):
+                    images.append(filename)
+            return images
+        else:
+            filename = ydl.prepare_filename(info)
+            if format_type == "audio_only":
+                base, _ = os.path.splitext(filename)
+                filename = base + ".mp3"
+            return filename
+
+# --- واجهة الموقع الحديثة (Glassmorphic + Preview + Progress Bar) ---
+HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مُحمّل الفيديوهات والصور الشامل</title>
+    <title>مُحمّل الميديا الاحترافي 🚀</title>
+
+    <!-- Google Fonts & Font Awesome Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
     <style>
-        * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
-        body { background: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
-        .card { background: #1e293b; padding: 30px; border-radius: 16px; width: 100%; max-width: 500px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); text-align: center; }
-        h1 { margin-bottom: 10px; font-size: 24px; color: #38bdf8; }
-        .platforms { font-size: 13px; color: #94a3b8; margin-bottom: 15px; }
-        .stats-badge { background: #0284c7; color: #fff; padding: 6px 14px; border-radius: 20px; font-size: 14px; display: inline-block; margin-bottom: 20px; }
-        input[type="text"], select { width: 100%; padding: 14px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #fff; font-size: 16px; margin-bottom: 14px; outline: none; }
-        button { width: 100%; padding: 14px; border-radius: 8px; border: none; background: #0284c7; color: #fff; font-size: 16px; font-weight: bold; cursor: pointer; transition: background 0.2s; margin-bottom: 10px; }
-        button:hover { background: #0369a1; }
-        button:disabled { background: #475569; cursor: not-allowed; }
-        .share-btn { background: #10b981; }
-        .share-btn:hover { background: #059669; }
-        #status { margin-top: 15px; font-size: 14px; color: #94a3b8; line-height: 1.5; }
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: rgba(22, 27, 34, 0.75);
+            --accent-gradient: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+            --button-green: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            --text-color: #f0f6fc;
+            --text-secondary: #8b949e;
+            --border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        * { box-sizing: border-box; font-family: 'Tajawal', sans-serif; margin: 0; padding: 0; }
+
+        body {
+            background: #090d16;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(79, 172, 254, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(0, 242, 254, 0.15) 0px, transparent 50%);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            padding: 35px 25px;
+            width: 100%;
+            max-width: 480px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            text-align: center;
+        }
+
+        h1 { font-size: 1.8rem; font-weight: 900; margin-bottom: 8px; color: #fff; }
+        .sub-text { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 20px; }
+
+        .stat-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(79, 172, 254, 0.15);
+            color: #4facfe;
+            padding: 8px 18px;
+            border-radius: 50px;
+            font-size: 0.88rem;
+            font-weight: 700;
+            margin-bottom: 25px;
+            border: 1px solid rgba(79, 172, 254, 0.3);
+        }
+
+        .input-group { margin-bottom: 15px; }
+
+        input, select {
+            width: 100%;
+            padding: 14px 16px;
+            background: rgba(13, 17, 23, 0.8);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            color: #fff;
+            font-size: 0.95rem;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        input:focus, select:focus {
+            border-color: #4facfe;
+            box-shadow: 0 0 12px rgba(79, 172, 254, 0.3);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .btn-main { background: var(--accent-gradient); color: #000; }
+        .btn-share { background: var(--button-green); color: #000; }
+        .btn:active { transform: scale(0.98); }
+
+        /* Preview Card (المعاينة) */
+        .preview-card {
+            display: none;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 16px;
+            padding: 15px;
+            margin: 15px 0;
+            border: 1px solid var(--border-color);
+            text-align: right;
+        }
+
+        .preview-card img {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+            border-radius: 12px;
+            margin-bottom: 10px;
+        }
+
+        .preview-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Progress Bar (شريط التقدم) */
+        .progress-box {
+            display: none;
+            margin: 15px 0;
+        }
+
+        .progress-bar-bg {
+            background: rgba(255, 255, 255, 0.1);
+            height: 10px;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            background: var(--accent-gradient);
+            height: 100%;
+            width: 0%;
+            transition: width 0.4s ease;
+        }
+
+        .progress-text {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 6px;
+        }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h1>🚀 مُحمّل الفيديوهات والميديا</h1>
-        <div class="platforms">تيك توك • يوتيوب • إنستغرام • سناب شات • إكس</div>
-        <div class="stats-badge">إجمالي التحميلات: <span id="count">...</span></div>
-        
-        <input type="text" id="videoUrl" placeholder="أدخل رابط المقطع أو ألبوم الصور..." />
-        
-        <select id="formatType">
-            <option value="video_best">فيديو بأعلى جودة (MP4)</option>
-            <option value="video_low">فيديو بجودة متوسطة (توفير البيانات)</option>
-            <option value="audio_only">صوت فقط (MP3)</option>
+
+<div class="container">
+    <h1>🚀 مُحمّل الميديا الذكي</h1>
+    <p class="sub-text">تيك توك • يوتيوب • إنستغرام • سناب شات • إكس</p>
+
+    <div class="stat-badge">
+        <i class="fa-solid fa-chart-line"></i>
+        <span>إجمالي التحميلات: <span id="download-count">{{ downloads }}</span></span>
+    </div>
+
+    <div class="input-group">
+        <input type="url" id="media-url" placeholder="أدخل رابط المقطع أو ألبوم الصور..." oninput="fetchPreview()">
+    </div>
+
+    <!-- كارت المعاينة -->
+    <div class="preview-card" id="preview-box">
+        <img id="preview-img" src="" alt="Thumbnail">
+        <div class="preview-title" id="preview-title">جاري التجهيز...</div>
+    </div>
+
+    <div class="input-group">
+        <select id="format-type">
+            <option value="video_best">🎬 فيديو بأعلى جودة (MP4)</option>
+            <option value="video_low">📱 فيديو جودة متوسطة (توفير بيانات)</option>
+            <option value="audio_only">🎵 صوت فقط (MP3)</option>
         </select>
-        
-        <button id="downloadBtn" onclick="startDownload()">تحميل المحتوى</button>
-        <button class="share-btn" onclick="copySiteLink()">📋 مشاركة الموقع</button>
-        <div id="status"></div>
     </div>
 
-    <script>
-        async function fetchStats() {
-            try {
-                const res = await fetch('/stats');
-                const data = await res.json();
-                document.getElementById('count').innerText = data.downloads || 0;
-            } catch(e) {}
-        }
-        fetchStats();
-
-        function copySiteLink() {
-            navigator.clipboard.writeText(window.location.href);
-            alert("تم نسخ رابط الموقع بنجاح!");
-        }
-
-        async function startDownload() {
-            const urlInput = document.getElementById('videoUrl');
-            const formatSelect = document.getElementById('formatType');
-            const btn = document.getElementById('downloadBtn');
-            const status = document.getElementById('status');
-            const url = urlInput.value.trim();
-
-            if (!url) {
-                status.innerText = "⚠️ يرجى إدخال الرابط أولاً!";
-                return;
-            }
-
-            btn.disabled = true;
-            status.innerText = "⏳ جاري جلب وتجهيز المحتوى...";
-
-            try {
-                const response = await fetch('/api/download', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: url, format_type: formatSelect.value })
-                });
-
-                if (!response.ok) {
-                    const errData = await response.json();
-                    throw new Error(errData.error || "فشل التحميل من المصدر");
-                }
-
-                status.innerText = "✅ جاري التنزيل إلى جهازك...";
-                const blob = await response.blob();
-                const downloadUrl = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = downloadUrl;
-                a.download = response.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || "download_media";
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                status.innerText = "🎉 تم التحميل بنجاح!";
-                fetchStats();
-            } catch (err) {
-                status.innerText = "❌ حدث خطأ: " + err.message;
-            } finally {
-                btn.disabled = false;
-            }
-        }
-    </script>
-</body>
-</html>
-"""
-
-# --- لوحة تحكم المشرف (HTML) ---
-ADMIN_LAYOUT = """
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <title>لوحة التحكم - الإحصائيات</title>
-    <style>
-        body { background: #0f172a; color: #fff; font-family: system-ui; padding: 40px; text-align: center; }
-        .box { background: #1e293b; max-width: 400px; margin: 0 auto; padding: 30px; border-radius: 12px; }
-        h2 { color: #38bdf8; }
-        .num { font-size: 48px; font-weight: bold; color: #10b981; margin: 20px 0; }
-    </style>
-</head>
-<body>
-    <div class="box">
-        <h2>📊 لوحة تحكم المشرف</h2>
-        <p>إجمالي التنزيلات الناجحة:</p>
-        <div class="num">{{ downloads }}</div>
-        <p>حالة السيرفر: <span style="color: #10b981;">شغال 100%</span></p>
+    <!-- شريط التقدم -->
+    <div class="progress-box" id="progress-box">
+        <div class="progress-bar-bg">
+            <div class="progress-bar-fill" id="progress-fill"></div>
+        </div>
+        <div class="progress-text" id="progress-status">جاري التحميل...</div>
     </div>
-</body>
-</html>
-"""
 
-# --- 1. إدارة العداد والإحصائيات ---
-def load_stats():
-    if not os.path.exists(STATS_FILE):
-        return 0
-    try:
-        with open(STATS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f).get("downloads", 0)
-    except Exception:
-        return 0
+    <button class="btn btn-main" onclick="startDownload()">
+        <i class="fa-solid fa-download"></i> تحميل المحتوى
+    </button>
 
-def increment_downloads():
-    current_count = load_stats() + 1
-    try:
-        with open(STATS_FILE, "w", encoding="utf-8") as f:
-            json.dump({"downloads": current_count}, f)
-    except Exception as e:
-        print(f"Error saving stats: {e}")
-    return current_count
+    <button class="btn btn-share" onclick="shareSite()">
+        <i class="fa-solid fa-share-nodes"></i> مشاركة الموقع
+    </button>
+</div>
 
-# --- 2. مسارات الويب والموقع ---
-@app.route('/')
-def home():
-    return render_template_string(HTML_LAYOUT)
+<script>
+    let previewTimer;
 
-@app.route('/stats', methods=['GET'])
-def get_stats():
-    response = jsonify({"status": "online", "downloads": load_stats()})
-    response.headers.add("Access-Control-Allow-Origin", "*")
-    return response
+    function fetchPreview() {
+        clearTimeout(previewTimer);
+        const url = document.getElementById('media-url').value.trim();
+        const previewBox = document.getElementById('preview-box');
 
-# لوحة التحكم للمشرف (اقتراح #3)
-@app.route('/admin', methods=['GET'])
-def admin_panel():
-    pwd = request.args.get('pass', '')
-    if pwd != ADMIN_PASSWORD:
-        return "❌ كلمة المرور غير صحيحة! استخدم /admin?pass=YOUR_PASSWORD", 403
-    return render_template_string(ADMIN_LAYOUT, downloads=load_stats())
-
-@app.route('/api/download', methods=['POST'])
-def web_download():
-    data = request.get_json() or {}
-    url = data.get('url', '').strip()
-    fmt_type = data.get('format_type', 'video_best')
-    
-    if not url:
-        return jsonify({"error": "الرابط مطلوب"}), 400
-
-    try:
-        result = download_media(url, format_type=fmt_type)
-        
-        # إذا كانت النتيجة قائمة ملفات (ألبوم صور)
-        if isinstance(result, list):
-            zip_filename = "downloads/photos_album.zip"
-            with zipfile.ZipFile(zip_filename, 'w') as zipf:
-                for f in result:
-                    if os.path.exists(f):
-                        zipf.write(f, os.path.basename(f))
-            file_path = zip_filename
-        else:
-            file_path = result
-
-        if not file_path or not os.path.exists(file_path):
-            return jsonify({"error": "فشل حفظ الملف على السيرفر"}), 500
-
-        @after_this_request
-        def remove_file(response):
-            try:
-                if isinstance(result, list):
-                    for f in result:
-                        if os.path.exists(f): os.remove(f)
-                    if os.path.exists(zip_filename): os.remove(zip_filename)
-                elif os.path.exists(file_path):
-                    os.remove(file_path)
-            except Exception:
-                pass
-            return response
-
-        return send_file(file_path, as_attachment=True)
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# --- 3. دالة التحميل المحدثة (تأخذ نوع الجودة وتدعم ألبومات الصور) ---
-def download_media(url, progress_callback=None, format_type="video_best"):
-    increment_downloads()
-
-    def hook(d):
-        if d['status'] == 'downloading' and progress_callback:
-            total = d.get('total_bytes') or d.get('total_bytes_estimate') or 0
-            downloaded = d.get('downloaded_bytes', 0)
-            percent = (downloaded / total * 100) if total > 0 else 0
-            speed = d.get('_speed_str', 'N/A')
-            progress_callback(percent, speed)
-
-    format_opt = 'best'
-    if format_type == "video_low":
-        format_opt = 'worstvideo+worstaudio/worst'
-    elif format_type == "audio_only":
-        format_opt = 'bestaudio/best'
-
-    ydl_opts = {
-        'format': format_opt,
-        'outtmpl': 'downloads/%(id)s_%(autonumber)s.%(ext)s',
-        'progress_hooks': [hook],
-        'quiet': True,
-        'no_warnings': True,
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        if (url.startsWith('http')) {
+            previewTimer = setTimeout(() => {
+                fetch('/api/preview?url=' + encodeURIComponent(url))
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            document.getElementById('preview-img').src = data.thumbnail;
+                            document.getElementById('preview-title').innerText = data.title;
+                            previewBox.style.display = 'block';
+                        }
+                    }).catch(() => {});
+            }, 800);
+        } else {
+            previewBox.style.display = 'none';
         }
     }
 
-    if os.path.exists("cookies.txt"):
-        ydl_opts['cookiefile'] = "cookies.txt"
+    function startDownload() {
+        const url = document.getElementById('media-url').value.trim();
+        const fmt = document.getElementById('format-type').value;
+        if (!url) { alert('الرجاء أدخال رابط صحيح أولاً!'); return; }
 
-    os.makedirs('downloads', exist_ok=True)
+        const pBox = document.getElementById('progress-box');
+        const pFill = document.getElementById('progress-fill');
+        const pStatus = document.getElementById('progress-status');
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        
-        # دعم ألبوم الصور (اقتراح #4)
-        if 'entries' in info and len(info['entries']) > 1:
-            files = []
-            for entry in info['entries']:
-                if entry:
-                    fname = ydl.prepare_filename(entry)
-                    if os.path.exists(fname):
-                        files.append(fname)
-            return files if files else ydl.prepare_filename(info['entries'][0])
-        elif 'entries' in info and len(info['entries']) == 1:
-            return ydl.prepare_filename(info['entries'][0])
-        else:
-            return ydl.prepare_filename(info)
+        pBox.style.display = 'block';
+        pFill.style.width = '30%';
+        pStatus.innerText = 'جاري المعالجة والصنع...';
 
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+        fetch('/download', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({url: url, format_type: fmt})
+        })
+        .then(response => {
+            pFill.style.width = '80%';
+            pStatus.innerText = 'جاري تجهيز الملف لتنزيله...';
+            return response.blob();
+        })
+        .then(blob => {
+            pFill.style.width = '100%';
+            pStatus.innerText = 'تم التحميل بنجاح!';
+            
+            const link = document.createElement('a');
+            link.href = window.URL.createObjectURL(blob);
+            link.download = "downloaded_media";
+            link.click();
+
+            setTimeout(() => { pBox.style.display = 'none'; }, 2000);
+            location.reload();
+        })
+        .catch(err => {
+            alert('حدث خطأ أثناء التحميل.');
+            pBox.style.display = 'none';
+        });
+    }
+
+    function shareSite() {
+        if (navigator.share) {
+            navigator.share({ title: 'مُحمّل الميديا', url: window.location.href });
+        } else {
+            navigator.clipboard.writeText(window.location.href);
+            alert('تم نسخ رابط الموقع للحافظة!');
+        }
+    }
+</script>
+
+</body>
+</html>
+"""
+
+@app.route('/')
+def home():
+    stats = get_stats()
+    return render_template_string(HTML_TEMPLATE, downloads=stats["downloads"])
+
+@app.route('/api/preview')
+def api_preview():
+    url = request.args.get('url')
+    try:
+        info = get_media_info(url)
+        return jsonify({'success': True, **info})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/download', methods=['POST'])
+def web_download():
+    data = request.get_json()
+    url = data.get('url')
+    fmt = data.get('format_type', 'video_best')
+    try:
+        file_path = download_media(url, format_type=fmt)
+        if isinstance(file_path, list):
+            file_path = file_path[0]
+        return send_file(file_path, as_attachment=True)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@app.route('/admin')
+def admin_panel():
+    password = request.args.get('pass')
+    if password == '123456':
+        stats = get_stats()
+        return f"<h1>لوحة التحكم الخاصة بك</h1><p>إجمالي التحميلات حتى الآن: <b>{stats['downloads']}</b></p>"
+    return "خطأ: غير مصرح لك بدخول لوحة التحكم."
