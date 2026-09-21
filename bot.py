@@ -71,11 +71,11 @@ def process_ai_inpainting(video_path):
         with open(video_path, 'rb') as f:
             encoded_video = base64.b64encode(f.read()).decode('utf-8')
         
+        # طلب المعالجة عبر رابط النموذج الرسمي المباشر
         upload_req = requests.post(
-            "https://api.replicate.com/v1/predictions",
+            "https://api.replicate.com/v1/models/sczhou/propainter/predictions",
             headers=headers,
             json={
-                "version": "bf6398f561b365825d1947b4d1b8f041b6c00d41829e0617300c8f5f4b5f8997",
                 "input": {
                     "video": f"data:video/mp4;base64,{encoded_video}"
                 }
@@ -108,7 +108,7 @@ def process_ai_inpainting(video_path):
                     return clean_path
                 break
             elif status in ["failed", "canceled"]:
-                logger.error("فشلت عملية الذكاء الاصطناعي")
+                logger.error(f"فشلت عملية الذكاء الاصطناعي: {check_res}")
                 break
 
     except Exception as e:
