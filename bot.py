@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import gc
+import subprocess
 import yt_dlp
 from threading import Thread
 from flask import Flask, render_template_string, request, jsonify, send_file
@@ -11,15 +12,11 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ----------------------------------------------------
-# 1️⃣ قسم إدارة البيانات وحفظ المستخدمين والصيانة
-# ----------------------------------------------------
 app = Flask(__name__)
 COUNTER_FILE = "stats.json"
 USERS_FILE = "users.json"
 MAINTENANCE_FILE = "maintenance.json"
-
-ADMIN_ID = os.getenv("ADMIN_ID") # يمكنك وضع آيدي حسابك في متغيرات البيئة بـ Render
+ADMIN_ID = os.getenv("ADMIN_ID")
 
 def get_stats():
     if os.path.exists(COUNTER_FILE):
@@ -91,19 +88,47 @@ def detect_platform(url):
         return "🐦 تويتر / X"
     return "🌐 منصة إلكترونية"
 
-def download_media(url, format_type="video_best"):
+def apply_text_removal_filter(input_path):
+    """
+    دالة تجريبية لتطبيق فلتر delogo لإخفاء/تغبيش منطقة النصوص المدمجة في الفيديو
+    """
+    output_path = input_path.replace(".mp4", "_clean.mp4")
+    
+    # إحداثيات منطقة النص (يمكنك تعديل x, y, w, h حسب موقع الكتابة)
+    # x: البعد من اليسار, y: البعد من الأعلى, w: العرض, h: الارتفاع
+    x, y, w, h = 100, 800, 500, 200 
+    
+    filter_cmd = f"delogo=x={x}:y={y}:w={w}:h={h}"
+    
+    cmd = [
+        'ffmpeg', '-y',
+        '-i', input_path,
+        '-vf', filter_cmd,
+        '-c:a', 'copy',
+        output_path
+    ]
+    
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if os.path.exists(output_path):
+            os.remove(input_path) # حذف الملف الأصلي واستبداله بالمعالج
+            return output_path
+    except Exception as e:
+        logger.error(f"FFmpeg processing failed: {e}")
+    
+    return input_path # في حال فشل الفلتر يعود للملف الأصلي تلقائياً
+
+def download_media(url, format_type="video_best", remove_text=False):
     increment_stats()
     os.makedirs('downloads', exist_ok=True)
     target_url = clean_url(url)
     
-    # اختيار أعلى جودة أصلية ممكنة
     ydl_opts = {
         'outtmpl': 'downloads/%(id)s.%(ext)s',
         'quiet': True,
         'no_warnings': True,
-        'format': 'best[ext=mp4][filesize<50M]/bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[filesize<50M]/best',
+        'format': 'best',
         'max_filesize': 50 * 1024 * 1024,
-        'merge_output_format': 'mp4',
     }
 
     if format_type == "audio_only":
@@ -117,13 +142,18 @@ def download_media(url, format_type="video_best"):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(target_url, download=True)
         filename = ydl.prepare_filename(info)
+        
         if format_type == "audio_only":
             base, _ = os.path.splitext(filename)
             filename = base + ".mp3"
+        elif remove_text and filename.endswith('.mp4'):
+            # تطبيق فلتر التغبيش التجريبي
+            filename = apply_text_removal_filter(filename)
+            
         return filename
 
 # ----------------------------------------------------
-# 2️⃣ سيرفر Web / Flask
+# سيرفر Web
 # ----------------------------------------------------
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -186,7 +216,7 @@ def run_flask_site():
     app.run(host='0.0.0.0', port=port, use_reloader=False)
 
 # ----------------------------------------------------
-# 3️⃣ قسم بوت تليجرام (Telegram Bot Engine)
+# قسم بوت تليجرام
 # ----------------------------------------------------
 user_urls = {}
 
@@ -195,62 +225,20 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_user(user_id)
     
     if is_maintenance() and str(user_id) != str(ADMIN_ID):
-        return await update.message.reply_text("🛠 **البوت يخضع لتحديثات وصيانة سريعة حالياً.**\nيرجى المحاولة بعد قليل ⚡️", parse_mode="Markdown")
+        return await update.message.reply_text("🛠 **البوت يخضع لتحديثات وصيانة سريعة حالياً.**", parse_mode="Markdown")
 
-    welcome_text = "أهلاً بك! أرسل لي أي رابط (تيك توك، إنستغرام، يوتيوب، تويتر) وسأقوم بتحميله لك بأعلى جودة أصلية ⚡️"
+    welcome_text = "أهلاً بك! أرسل لي أي رابط وسأقوم بتحميله لك فوراً ⚡️"
     keyboard = [
-        [InlineKeyboardButton("🔍 جرب التحميل السريع", switch_inline_query="")],
         [InlineKeyboardButton("🌐 المنصة الإلكترونية", url="https://ab-rbx9.onrender.com")]
     ]
     await update.message.reply_text(welcome_text, reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    stats = get_stats()
-    users_count = len(get_all_users())
-    await update.message.reply_text(
-        f"📊 **إحصائيات البوت:**\n\n"
-        f"👥 عدد المستخدمين: `{users_count}`\n"
-        f"📥 إجمالي التحميلات: `{stats.get('downloads', 0)}`",
-        parse_mode="Markdown"
-    )
-
-async def maintenance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    if ADMIN_ID and user_id != str(ADMIN_ID):
-        return await update.message.reply_text("❌ هذا الأمر مخصص لمالك البوت فقط.")
-    
-    status = toggle_maintenance()
-    txt = "🛠 تم **تفعيل** وضع الصيانة وإيقاف البوت عن المستخدمين." if status else "✅ تم **إلغاء** وضع الصيانة وإعادة تشغيل البوت للجميع."
-    await update.message.reply_text(txt, parse_mode="Markdown")
-
-async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    if ADMIN_ID and user_id != str(ADMIN_ID):
-        return await update.message.reply_text("❌ هذا الأمر مخصص لمالك البوت فقط.")
-    
-    msg_to_send = " ".join(context.args)
-    if not msg_to_send:
-        return await update.message.reply_text("💡 اكتب الرسالة بعد الأمر كالتالي:\n`/broadcast أهلاً بكم في التحديث الجديد`", parse_mode="Markdown")
-    
-    users = get_all_users()
-    success, failed = 0, 0
-    await update.message.reply_text(f"📢 جاري إرسال الإذاعة إلى {len(users)} مستخدم...")
-    
-    for uid in users:
-        try:
-            await context.bot.send_message(chat_id=uid, text=msg_to_send)
-            success += 1
-        except:
-            failed += 1
-            
-    await update.message.reply_text(f"✅ اكتملت الإذاعة!\n\nتم الإرسال لـ: {success}\nفشل الإرسال لـ: {failed}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     save_user(user_id)
     
     if is_maintenance() and str(user_id) != str(ADMIN_ID):
-        return await update.message.reply_text("🛠 **البوت يخضع لتحديثات وصيانة سريعة حالياً.**\nيرجى المحاولة بعد قليل ⚡️", parse_mode="Markdown")
+        return await update.message.reply_text("🛠 **البوت يخضع لتحديثات وصيانة سريعة حالياً.**", parse_mode="Markdown")
 
     url = update.message.text.strip()
     if not url.startswith("http"):
@@ -260,7 +248,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     platform_name = detect_platform(url)
     
     keyboard = [
-        [InlineKeyboardButton("🎬 تحميل فيديو MP4 بأعلى جودة", callback_data="video_best")],
+        [InlineKeyboardButton("🎬 تحميل فيديو أصلي (خام)", callback_data="video_best")],
+        [InlineKeyboardButton("✨ تحميل فيديو + فلتر إزالة النص (تجريبي)", callback_data="video_clean_text")],
         [InlineKeyboardButton("🎵 تحميل صوت فقط MP3", callback_data="audio_only")]
     ]
     
@@ -276,26 +265,26 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not url:
         return await query.edit_message_text("انتهت الجلسة، يرجى إرسال الرابط مجدداً.")
     
-    # تحديث النص لبدء التحميل
-    await query.edit_message_text("⏳ جاري سحب المقطع بأعلى جودة...")
+    await query.edit_message_text("⏳ جاري التحميل والمعالجة...")
     file_path = None
     try:
-        file_path = download_media(url, query.data)
+        remove_text_flag = (query.data == "video_clean_text")
+        fmt = "audio_only" if query.data == "audio_only" else "video_best"
+        
+        file_path = download_media(url, format_type=fmt, remove_text=remove_text_flag)
         
         file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
         if file_size_mb > 50:
-            await query.message.reply_text("⚠️ حجم الملف أكبر من 50 ميجابايت، وهو الحد الأقصى المسموح به في تليجرام.")
+            await query.message.reply_text("⚠️ حجم الملف أكبر من 50 ميجابايت.")
             return
 
-        caption_text = "✅ تم التحميل بأعلى جودة أصلية بواسطة بوت التحميل ⚡️"
+        caption_text = "✅ تم التحميل بنجاح بواسطة البوت ⚡️"
         
-        # إرسال الملف
-        if query.data == "audio_only":
+        if fmt == "audio_only":
             await context.bot.send_audio(chat_id=query.message.chat_id, audio=open(file_path, 'rb'), caption=caption_text)
         else:
             await context.bot.send_video(chat_id=query.message.chat_id, video=open(file_path, 'rb'), supports_streaming=True, caption=caption_text)
         
-        # ميزة تنظيف المحادثة تلقائياً: حذف رسالة الإنتظار القديمة
         try:
             await query.message.delete()
         except:
@@ -303,14 +292,12 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.error(f"Error during download: {e}")
-        await query.message.reply_text("❌ تعذر تحميل المقطع. تأكد أن الرابط يعمل والحساب ليس خاصاً (Private).")
+        await query.message.reply_text("❌ تعذر تحميل المقطع أو معالجته.")
     finally:
         user_urls.pop(user_id, None)
         if file_path and os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-            except Exception:
-                pass
+            try: os.remove(file_path)
+            except: pass
         gc.collect()
 
 def main():
@@ -319,17 +306,9 @@ def main():
     if not TOKEN: raise ValueError("TELEGRAM_BOT_TOKEN غير متوفر!")
     
     bot_app = Application.builder().token(TOKEN).build()
-    
-    # الأوامر الرئيسية
     bot_app.add_handler(CommandHandler("start", start_command))
-    bot_app.add_handler(CommandHandler("stats", stats_command))
-    bot_app.add_handler(CommandHandler("broadcast", broadcast_command))
-    bot_app.add_handler(CommandHandler("maintenance", maintenance_command))
-    
-    # التعامل مع الرسائل والأزرار
     bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     bot_app.add_handler(CallbackQueryHandler(button_click))
-    
     bot_app.run_polling()
 
 if __name__ == "__main__":
