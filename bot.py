@@ -1,17 +1,18 @@
 import os
 import json
 import logging
+import gc
 import yt_dlp
 from threading import Thread
 from flask import Flask, render_template_string, request, jsonify, send_file
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultArticle, InputTextMessageContent
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, InlineQueryHandler, filters, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ----------------------------------------------------
-# 1️⃣ قسم سيرفر FLASK والموقع الإلكتروني وحساب الإحصائيات
+# 1️⃣ قسم سيرفر FLASK والموقع الإلكتروني
 # ----------------------------------------------------
 app = Flask(__name__)
 COUNTER_FILE = "stats.json"
@@ -34,14 +35,15 @@ def increment_stats():
 
 def download_media(url, format_type="video_best"):
     increment_stats()
-    output_template = 'downloads/%(id)s.%(ext)s'
     os.makedirs('downloads', exist_ok=True)
-
+    
+    # تحسين استهلاك الذاكرة أثناء التحميل وتحديد الحجم
     ydl_opts = {
-        'outtmpl': output_template,
+        'outtmpl': 'downloads/%(id)s.%(ext)s',
         'quiet': True,
         'no_warnings': True,
-        'format': 'best[ext=mp4]/best' if format_type != "audio_only" else 'bestaudio/best',
+        'format': 'best[ext=mp4][filesize<50M]/best[filesize<50M]' if format_type != "audio_only" else 'bestaudio/best',
+        'max_filesize': 50 * 1024 * 1024, # حد أقصى 50 ميجابايت لمنع توقف السيرفر
     }
 
     if format_type == "audio_only":
@@ -103,11 +105,18 @@ def home():
 @app.route('/download', methods=['POST'])
 def web_download():
     data = request.get_json()
+    file_path = None
     try:
         file_path = download_media(data.get('url'), data.get('format_type', 'video_best'))
         return send_file(file_path, as_attachment=True)
     except Exception as e:
         return jsonify({'error': str(e)}), 400
+    finally:
+        # حذف الملف وتفريغ الذاكرة فور الانتهاء
+        if file_path and os.path.exists(file_path):
+            try: os.remove(file_path)
+            except: pass
+        gc.collect()
 
 def run_flask_site():
     port = int(os.environ.get("PORT", 5000))
@@ -146,11 +155,13 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
-    url = user_urls.get(query.from_user.id)
+    user_id = query.from_user.id
+    url = user_urls.get(user_id)
     if not url:
         return await query.edit_message_text("انتهت الجلسة، أرسل الرابط مجدداً.")
     
     await query.edit_message_text("⏳ جاري التحميل...")
+    file_path = None
     try:
         file_path = download_media(url, query.data)
         with open(file_path, 'rb') as f:
@@ -159,8 +170,14 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await query.message.reply_text(f"❌ حدث خطأ: {e}")
     finally:
-        if 'file_path' in locals() and os.path.exists(file_path):
-            os.remove(file_path)
+        # مسح الرابط والملف وتنظيف الذاكرة بشكل فوري ودائم
+        user_urls.pop(user_id, None)
+        if file_path and os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception:
+                pass
+        gc.collect() # تفريغ ذاكرة الرام فوراً
 
 def main():
     Thread(target=run_flask_site, daemon=True).start()
