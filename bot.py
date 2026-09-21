@@ -33,11 +33,21 @@ def increment_stats():
         json.dump(stats, f)
     return stats["downloads"]
 
+def clean_url(url):
+    # 1. إزالة رموز التتبع والرموز الزائدة
+    clean = url.split("?")[0].strip()
+    # 2. تحويل روابط سلايد شو/صور تيك توك لمسار مدعوم
+    if "tiktok.com" in clean and "/photo/" in clean:
+        clean = clean.replace("/photo/", "/video/")
+    return clean
+
 def download_media(url, format_type="video_best"):
     increment_stats()
     os.makedirs('downloads', exist_ok=True)
     
-    # اختيار صيغة MP4 جاهزة ومدموجة أصلية لمنع التقطيع وتلف الصوت
+    # تنظيف الرابط أولاً
+    target_url = clean_url(url)
+    
     ydl_opts = {
         'outtmpl': 'downloads/%(id)s.%(ext)s',
         'quiet': True,
@@ -56,7 +66,7 @@ def download_media(url, format_type="video_best"):
         }]
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
+        info = ydl.extract_info(target_url, download=True)
         filename = ydl.prepare_filename(info)
         if format_type == "audio_only":
             base, _ = os.path.splitext(filename)
