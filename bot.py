@@ -4,6 +4,7 @@ import logging
 import gc
 import requests
 import time
+import base64
 import yt_dlp
 from threading import Thread
 from flask import Flask, render_template_string, request, jsonify, send_file
@@ -66,18 +67,20 @@ def process_ai_inpainting(video_path):
             "Content-Type": "application/json"
         }
         
-        # رفع الفيديو تلقائياً وإرسال طلب المعالجة بنموذج ProPainter
+        # تشفير الفيديو بـ base64
         with open(video_path, 'rb') as f:
-            upload_req = requests.post(
-                "https://api.replicate.com/v1/predictions",
-                headers=headers,
-                json={
-                    "version": "bf6398f561b365825d1947b4d1b8f041b6c00d41829e0617300c8f5f4b5f8997",
-                    "input": {
-                        "video": f"data:video/mp4;base64,{requests.utils.base64.b64encode(f.read()).decode('utf-8')}"
-                    }
+            encoded_video = base64.b64encode(f.read()).decode('utf-8')
+        
+        upload_req = requests.post(
+            "https://api.replicate.com/v1/predictions",
+            headers=headers,
+            json={
+                "version": "bf6398f561b365825d1947b4d1b8f041b6c00d41829e0617300c8f5f4b5f8997",
+                "input": {
+                    "video": f"data:video/mp4;base64,{encoded_video}"
                 }
-            )
+            }
+        )
         
         res_data = upload_req.json()
         prediction_id = res_data.get("id")
@@ -100,7 +103,8 @@ def process_ai_inpainting(video_path):
                     v_data = requests.get(output_url).content
                     with open(clean_path, 'wb') as out_f:
                         out_f.write(v_data)
-                    os.remove(video_path)
+                    if os.path.exists(video_path):
+                        os.remove(video_path)
                     return clean_path
                 break
             elif status in ["failed", "canceled"]:
@@ -206,7 +210,7 @@ function dl(){
         statusDiv.innerText = "🤖 جاري معالجة الفيديو بالذكاء الاصطناعي ومسح النصوص (قد يستغرق لحظات)...";
     } else if(selectedOption === 'audio_only') {
         formatType = 'audio_only';
-        statusDiv.innerText = "⏳ جاري استخرج الصوت...";
+        statusDiv.innerText = "⏳ جاري استخراج الصوت...";
     } else {
         statusDiv.innerText = "⏳ جاري التحميل المباشر...";
     }
