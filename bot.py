@@ -12,6 +12,9 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# ----------------------------------------------------
+# 1️⃣ قسم إدارة البيانات وحفظ المستخدمين والصيانة
+# ----------------------------------------------------
 app = Flask(__name__)
 COUNTER_FILE = "stats.json"
 USERS_FILE = "users.json"
@@ -90,20 +93,19 @@ def detect_platform(url):
 
 def apply_text_removal_filter(input_path):
     """
-    دالة تجريبية لتطبيق فلتر delogo لإخفاء/تغبيش منطقة النصوص المدمجة في الفيديو
+    تطبيق فلتر التغبيش الضبابي (boxblur) على الجزء السفلي من الفيديو لتغطية النصوص
     """
     output_path = input_path.replace(".mp4", "_clean.mp4")
     
-    # إحداثيات منطقة النص (يمكنك تعديل x, y, w, h حسب موقع الكتابة)
-    # x: البعد من اليسار, y: البعد من الأعلى, w: العرض, h: الارتفاع
-    x, y, w, h = 100, 800, 500, 200 
+    # إحداثيات مستطيل التغبيش (x: يسار، y: أعلى، w: العرض، h: الارتفاع)
+    x, y, w, h = 80, 750, 560, 200 
     
-    filter_cmd = f"delogo=x={x}:y={y}:w={w}:h={h}"
+    filter_complex = f"[0:v]crop={w}:{h}:{x}:{y},boxblur=20:10[blurred];[0:v][blurred]overlay={x}:{y}"
     
     cmd = [
         'ffmpeg', '-y',
         '-i', input_path,
-        '-vf', filter_cmd,
+        '-filter_complex', filter_complex,
         '-c:a', 'copy',
         output_path
     ]
@@ -111,12 +113,12 @@ def apply_text_removal_filter(input_path):
     try:
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if os.path.exists(output_path):
-            os.remove(input_path) # حذف الملف الأصلي واستبداله بالمعالج
+            os.remove(input_path) # حذف الفيديو الأصلي واستبداله بالمعدل
             return output_path
     except Exception as e:
-        logger.error(f"FFmpeg processing failed: {e}")
+        logger.error(f"FFmpeg blur failed: {e}")
     
-    return input_path # في حال فشل الفلتر يعود للملف الأصلي تلقائياً
+    return input_path
 
 def download_media(url, format_type="video_best", remove_text=False):
     increment_stats()
@@ -147,13 +149,12 @@ def download_media(url, format_type="video_best", remove_text=False):
             base, _ = os.path.splitext(filename)
             filename = base + ".mp3"
         elif remove_text and filename.endswith('.mp4'):
-            # تطبيق فلتر التغبيش التجريبي
             filename = apply_text_removal_filter(filename)
             
         return filename
 
 # ----------------------------------------------------
-# سيرفر Web
+# 2️⃣ سيرفر Web / Flask
 # ----------------------------------------------------
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -216,7 +217,7 @@ def run_flask_site():
     app.run(host='0.0.0.0', port=port, use_reloader=False)
 
 # ----------------------------------------------------
-# قسم بوت تليجرام
+# 3️⃣ قسم بوت تليجرام (Telegram Bot Engine)
 # ----------------------------------------------------
 user_urls = {}
 
@@ -227,11 +228,52 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_maintenance() and str(user_id) != str(ADMIN_ID):
         return await update.message.reply_text("🛠 **البوت يخضع لتحديثات وصيانة سريعة حالياً.**", parse_mode="Markdown")
 
-    welcome_text = "أهلاً بك! أرسل لي أي رابط وسأقوم بتحميله لك فوراً ⚡️"
+    welcome_text = "أهلاً بك! أرسل لي أي رابط (تيك توك، إنستغرام، يوتيوب، تويتر) وسأقوم بتحميله لك فوراً ⚡️"
     keyboard = [
         [InlineKeyboardButton("🌐 المنصة الإلكترونية", url="https://ab-rbx9.onrender.com")]
     ]
     await update.message.reply_text(welcome_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    stats = get_stats()
+    users_count = len(get_all_users())
+    await update.message.reply_text(
+        f"📊 **إحصائيات البوت:**\n\n"
+        f"👥 عدد المستخدمين: `{users_count}`\n"
+        f"📥 إجمالي التحميلات: `{stats.get('downloads', 0)}`",
+        parse_mode="Markdown"
+    )
+
+async def maintenance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    if ADMIN_ID and user_id != str(ADMIN_ID):
+        return await update.message.reply_text("❌ هذا الأمر مخصص لمالك البوت فقط.")
+    
+    status = toggle_maintenance()
+    txt = "🛠 تم **تفعيل** وضع الصيانة وإيقاف البوت." if status else "✅ تم **إلغاء** وضع الصيانة وإعادة تشغيل البوت."
+    await update.message.reply_text(txt, parse_mode="Markdown")
+
+async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    if ADMIN_ID and user_id != str(ADMIN_ID):
+        return await update.message.reply_text("❌ هذا الأمر مخصص لمالك البوت فقط.")
+    
+    msg_to_send = " ".join(context.args)
+    if not msg_to_send:
+        return await update.message.reply_text("💡 اكتب الرسالة بعد الأمر كالتالي:\n`/broadcast أهلاً بكم في البوت`", parse_mode="Markdown")
+    
+    users = get_all_users()
+    success, failed = 0, 0
+    await update.message.reply_text(f"📢 جاري إرسال الإذاعة إلى {len(users)} مستخدم...")
+    
+    for uid in users:
+        try:
+            await context.bot.send_message(chat_id=uid, text=msg_to_send)
+            success += 1
+        except:
+            failed += 1
+            
+    await update.message.reply_text(f"✅ اكتملت الإذاعة!\n\nتم الإرسال لـ: {success}\nفشل الإرسال لـ: {failed}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -249,7 +291,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     keyboard = [
         [InlineKeyboardButton("🎬 تحميل فيديو أصلي (خام)", callback_data="video_best")],
-        [InlineKeyboardButton("✨ تحميل فيديو + فلتر إزالة النص (تجريبي)", callback_data="video_clean_text")],
+        [InlineKeyboardButton("✨ تحميل فيديو + تغبيش النص (تجريبي)", callback_data="video_clean_text")],
         [InlineKeyboardButton("🎵 تحميل صوت فقط MP3", callback_data="audio_only")]
     ]
     
@@ -306,9 +348,15 @@ def main():
     if not TOKEN: raise ValueError("TELEGRAM_BOT_TOKEN غير متوفر!")
     
     bot_app = Application.builder().token(TOKEN).build()
+    
     bot_app.add_handler(CommandHandler("start", start_command))
+    bot_app.add_handler(CommandHandler("stats", stats_command))
+    bot_app.add_handler(CommandHandler("broadcast", broadcast_command))
+    bot_app.add_handler(CommandHandler("maintenance", maintenance_command))
+    
     bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     bot_app.add_handler(CallbackQueryHandler(button_click))
+    
     bot_app.run_polling()
 
 if __name__ == "__main__":
