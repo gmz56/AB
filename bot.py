@@ -37,16 +37,18 @@ def download_media(url, format_type="video_best"):
     increment_stats()
     os.makedirs('downloads', exist_ok=True)
     
-    # تحسين استهلاك الذاكرة أثناء التحميل وتحديد الحجم
+    # اختيار صيغة MP4 جاهزة ومدموجة أصلية لمنع التقطيع وتلف الصوت
     ydl_opts = {
         'outtmpl': 'downloads/%(id)s.%(ext)s',
         'quiet': True,
         'no_warnings': True,
-        'format': 'best[ext=mp4][filesize<50M]/best[filesize<50M]' if format_type != "audio_only" else 'bestaudio/best',
-        'max_filesize': 50 * 1024 * 1024, # حد أقصى 50 ميجابايت لمنع توقف السيرفر
+        'format': 'best[ext=mp4][filesize<50M]/bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[filesize<50M]/best',
+        'max_filesize': 50 * 1024 * 1024,
+        'merge_output_format': 'mp4',
     }
 
     if format_type == "audio_only":
+        ydl_opts['format'] = 'bestaudio/best'
         ydl_opts['postprocessors'] = [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -112,7 +114,6 @@ def web_download():
     except Exception as e:
         return jsonify({'error': str(e)}), 400
     finally:
-        # حذف الملف وتفريغ الذاكرة فور الانتهاء
         if file_path and os.path.exists(file_path):
             try: os.remove(file_path)
             except: pass
@@ -170,14 +171,13 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await query.message.reply_text(f"❌ حدث خطأ: {e}")
     finally:
-        # مسح الرابط والملف وتنظيف الذاكرة بشكل فوري ودائم
         user_urls.pop(user_id, None)
         if file_path and os.path.exists(file_path):
             try:
                 os.remove(file_path)
             except Exception:
                 pass
-        gc.collect() # تفريغ ذاكرة الرام فوراً
+        gc.collect()
 
 def main():
     Thread(target=run_flask_site, daemon=True).start()
