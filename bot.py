@@ -34,9 +34,7 @@ def increment_stats():
     return stats["downloads"]
 
 def clean_url(url):
-    # 1. إزالة رموز التتبع والرموز الزائدة
     clean = url.split("?")[0].strip()
-    # 2. تحويل روابط سلايد شو/صور تيك توك لمسار مدعوم
     if "tiktok.com" in clean and "/photo/" in clean:
         clean = clean.replace("/photo/", "/video/")
     return clean
@@ -44,8 +42,6 @@ def clean_url(url):
 def download_media(url, format_type="video_best"):
     increment_stats()
     os.makedirs('downloads', exist_ok=True)
-    
-    # تنظيف الرابط أولاً
     target_url = clean_url(url)
     
     ydl_opts = {
@@ -53,7 +49,7 @@ def download_media(url, format_type="video_best"):
         'quiet': True,
         'no_warnings': True,
         'format': 'best[ext=mp4][filesize<50M]/bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[filesize<50M]/best',
-        'max_filesize': 50 * 1024 * 1024,
+        'max_filesize': 50 * 1024 * 1024, # حد 50 ميجابايت
         'merge_output_format': 'mp4',
     }
 
@@ -139,7 +135,7 @@ def run_flask_site():
 user_urls = {}
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    welcome_text = "أهلاً بك! أرسل لي أي رابط وسأقوم بتحميله لك فوراً ⚡️"
+    welcome_text = "أهلاً بك! أرسل لي أي رابط (تيك توك، إنستغرام، يوتيوب، تويتر) وسأقوم بتحميله لك فوراً ⚡️"
     keyboard = [
         [InlineKeyboardButton("🔍 جرب التحميل السريع", switch_inline_query="")],
         [InlineKeyboardButton("🌐 المنصة الإلكترونية", url="https://ab-rbx9.onrender.com")]
@@ -147,19 +143,24 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(welcome_text, reply_markup=reply_markup)
 
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    stats = get_stats()
+    await update.message.reply_text(f"📊 **إحصائيات البوت:**\n\nإجمالي عدد مرات التحميل: `{stats.get('downloads', 0)}`", parse_mode="Markdown")
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text.strip()
     if not url.startswith("http"):
-        return await update.message.reply_text("أرسل رابطاً صحيحاً 🔗")
+        return await update.message.reply_text("يرجى إرسال رابط صحيح يبدأ بـ http 🔗")
     
     user_urls[update.effective_user.id] = url
     
+    # إضافة خياري الفيديو والصوت
     keyboard = [
-        [InlineKeyboardButton("⚡️ تحميل فيديو مباشر", callback_data="video_best")]
+        [InlineKeyboardButton("🎬 تحميل فيديو MP4", callback_data="video_best")],
+        [InlineKeyboardButton("🎵 تحميل صوت فقط MP3", callback_data="audio_only")]
     ]
     
-    message_text = "🎉 **اختر خيار التحميل:**"
-    
+    message_text = "🎉 **اختر صيغة التحميل المطلوبة:**"
     await update.message.reply_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -169,17 +170,30 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     url = user_urls.get(user_id)
     if not url:
-        return await query.edit_message_text("انتهت الجلسة، أرسل الرابط مجدداً.")
+        return await query.edit_message_text("انتهت الجلسة، يرجى إرسال الرابط مجدداً.")
     
-    await query.edit_message_text("⏳ جاري التحميل...")
+    await query.edit_message_text("⏳ جاري التحميل، انتظر لحظات...")
     file_path = None
     try:
         file_path = download_media(url, query.data)
+        
+        # التأكد من عدم تجاوز حجم الملف 50 ميجابايت قبل الرفع
+        file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+        if file_size_mb > 50:
+            await query.message.reply_text("⚠️ حجم الملف أكبر من 50 ميجابايت، وهو الحد الأقصى المسموح به في تليجرام.")
+            return
+
+        caption_text = "✅ تم التحميل بنجاح بواسطة بوت التحميل ⚡️"
+        
         with open(file_path, 'rb') as f:
-            await context.bot.send_video(chat_id=query.message.chat_id, video=f, supports_streaming=True)
-        await query.message.reply_text("✅ تم التحميل بنجاح!")
+            if query.data == "audio_only":
+                await context.bot.send_audio(chat_id=query.message.chat_id, audio=f, caption=caption_text)
+            else:
+                await context.bot.send_video(chat_id=query.message.chat_id, video=f, supports_streaming=True, caption=caption_text)
+                
     except Exception as e:
-        await query.message.reply_text(f"❌ حدث خطأ: {e}")
+        logger.error(f"Error during download: {e}")
+        await query.message.reply_text("❌ تعذر تحميل المقطع. تأكد أن الرابط يعمل والحساب ليس خاصاً (Private).")
     finally:
         user_urls.pop(user_id, None)
         if file_path and os.path.exists(file_path):
@@ -196,6 +210,7 @@ def main():
     
     bot_app = Application.builder().token(TOKEN).build()
     bot_app.add_handler(CommandHandler("start", start_command))
+    bot_app.add_handler(CommandHandler("stats", stats_command)) # أمر الإحصائيات
     bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     bot_app.add_handler(CallbackQueryHandler(button_click))
     bot_app.run_polling()
