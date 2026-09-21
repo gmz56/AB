@@ -2,7 +2,8 @@ import os
 import json
 import logging
 import gc
-import subprocess
+import requests
+import time
 import yt_dlp
 from threading import Thread
 from flask import Flask, render_template_string, request, jsonify, send_file
@@ -12,15 +13,13 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ----------------------------------------------------
-# 1️⃣ قسم إدارة البيانات وحفظ المستخدمين والصيانة
-# ----------------------------------------------------
 app = Flask(__name__)
 COUNTER_FILE = "stats.json"
 USERS_FILE = "users.json"
-MAINTENANCE_FILE = "maintenance.json"
 ADMIN_ID = os.getenv("ADMIN_ID")
+REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 
+# --- إدارة الإحصائيات والمستخدمين ---
 def get_stats():
     if os.path.exists(COUNTER_FILE):
         try:
@@ -49,77 +48,71 @@ def save_user(user_id):
     with open(USERS_FILE, 'w') as f:
         json.dump(list(users), f)
 
-def get_all_users():
-    if os.path.exists(USERS_FILE):
-        try:
-            with open(USERS_FILE, 'r') as f:
-                return json.load(f)
-        except:
-            pass
-    return []
-
-def toggle_maintenance():
-    current = is_maintenance()
-    with open(MAINTENANCE_FILE, 'w') as f:
-        json.dump({"maintenance": not current}, f)
-    return not current
-
-def is_maintenance():
-    if os.path.exists(MAINTENANCE_FILE):
-        try:
-            with open(MAINTENANCE_FILE, 'r') as f:
-                return json.load(f).get("maintenance", False)
-        except:
-            pass
-    return False
-
 def clean_url(url):
     clean = url.split("?")[0].strip()
     if "tiktok.com" in clean and "/photo/" in clean:
         clean = clean.replace("/photo/", "/video/")
     return clean
 
-def detect_platform(url):
-    u = url.lower()
-    if "tiktok.com" in u:
-        return "🎵 تيك توك (TikTok)"
-    elif "instagram.com" in u:
-        return "📸 إنستغرام (Instagram)"
-    elif "youtube.com" in u or "youtu.be" in u:
-        return "🔴 يوتيوب (YouTube)"
-    elif "twitter.com" in u or "x.com" in u:
-        return "🐦 تويتر / X"
-    return "🌐 منصة إلكترونية"
+# --- معالجة الذكاء الاصطناعي لمسح النصوص (AI Inpainting) ---
+def process_ai_inpainting(video_path):
+    if not REPLICATE_API_TOKEN:
+        logger.warning("لم يتم العثور على REPLICATE_API_TOKEN، سيتم إرجاع الفيديو الأصلي.")
+        return video_path
 
-def apply_text_removal_filter(input_path):
-    """
-    تطبيق فلتر التغبيش الضبابي (boxblur) على الجزء السفلي من الفيديو لتغطية النصوص
-    """
-    output_path = input_path.replace(".mp4", "_clean.mp4")
-    
-    # إحداثيات مستطيل التغبيش (x: يسار، y: أعلى، w: العرض، h: الارتفاع)
-    x, y, w, h = 80, 750, 560, 200 
-    
-    filter_complex = f"[0:v]crop={w}:{h}:{x}:{y},boxblur=20:10[blurred];[0:v][blurred]overlay={x}:{y}"
-    
-    cmd = [
-        'ffmpeg', '-y',
-        '-i', input_path,
-        '-filter_complex', filter_complex,
-        '-c:a', 'copy',
-        output_path
-    ]
-    
     try:
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if os.path.exists(output_path):
-            os.remove(input_path) # حذف الفيديو الأصلي واستبداله بالمعدل
-            return output_path
-    except Exception as e:
-        logger.error(f"FFmpeg blur failed: {e}")
-    
-    return input_path
+        headers = {
+            "Authorization": f"Token {REPLICATE_API_TOKEN}",
+            "Content-Type": "application/json"
+        }
+        
+        # رفع الفيديو تلقائياً وإرسال طلب المعالجة بنموذج ProPainter
+        with open(video_path, 'rb') as f:
+            upload_req = requests.post(
+                "https://api.replicate.com/v1/predictions",
+                headers=headers,
+                json={
+                    "version": "bf6398f561b365825d1947b4d1b8f041b6c00d41829e0617300c8f5f4b5f8997",
+                    "input": {
+                        "video": f"data:video/mp4;base64,{requests.utils.base64.b64encode(f.read()).decode('utf-8')}"
+                    }
+                }
+            )
+        
+        res_data = upload_req.json()
+        prediction_id = res_data.get("id")
+        
+        if not prediction_id:
+            logger.error(f"خطأ في Replicate: {res_data}")
+            return video_path
 
+        # الانتظار لحين اكتمال معالجة الذكاء الاصطناعي
+        status_url = f"https://api.replicate.com/v1/predictions/{prediction_id}"
+        for _ in range(60): # أقصى انتظار 2 دقيقة
+            time.sleep(2)
+            check_res = requests.get(status_url, headers=headers).json()
+            status = check_res.get("status")
+            
+            if status == "succeeded":
+                output_url = check_res.get("output")
+                if output_url:
+                    clean_path = video_path.replace(".mp4", "_clean.mp4")
+                    v_data = requests.get(output_url).content
+                    with open(clean_path, 'wb') as out_f:
+                        out_f.write(v_data)
+                    os.remove(video_path)
+                    return clean_path
+                break
+            elif status in ["failed", "canceled"]:
+                logger.error("فشلت عملية الذكاء الاصطناعي")
+                break
+
+    except Exception as e:
+        logger.error(f"خطأ أثناء معالجة AI Inpainting: {e}")
+    
+    return video_path
+
+# --- تحميل الميديا ---
 def download_media(url, format_type="video_best", remove_text=False):
     increment_stats()
     os.makedirs('downloads', exist_ok=True)
@@ -149,43 +142,93 @@ def download_media(url, format_type="video_best", remove_text=False):
             base, _ = os.path.splitext(filename)
             filename = base + ".mp3"
         elif remove_text and filename.endswith('.mp4'):
-            filename = apply_text_removal_filter(filename)
+            filename = process_ai_inpainting(filename)
             
         return filename
 
-# ----------------------------------------------------
-# 2️⃣ سيرفر Web / Flask
-# ----------------------------------------------------
+# --- واجهة الويب (HTML) ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مُحمّل الميديا ⚡️</title>
+    <title>مُحمّل الميديا ومزيل النصوص بالذكاء الاصطناعي ⚡️</title>
     <style>
-        body { background: #0d1117; color: #fff; font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .card { background: #161b22; padding: 30px; border-radius: 15px; text-align: center; width: 90%; max-width: 400px; }
-        input, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 8px; border: none; box-sizing: border-box; }
-        button { background: #00f2fe; font-weight: bold; cursor: pointer; }
+        body { background: #0d1117; color: #fff; font-family: 'Segoe UI', system-ui, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .card { background: #161b22; padding: 30px; border-radius: 16px; text-align: center; width: 90%; max-width: 440px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid #30363d; }
+        h2 { margin-bottom: 20px; color: #58a6ff; font-size: 20px; }
+        input[type="url"] { width: 100%; padding: 14px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #30363d; background: #0d1117; color: #fff; box-sizing: border-box; font-size: 14px; text-align: center; }
+        .options { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; text-align: right; font-size: 14px; color: #8b949e; }
+        .option-item { display: flex; align-items: center; gap: 10px; background: #21262d; padding: 12px; border-radius: 8px; cursor: pointer; }
+        button { width: 100%; padding: 14px; border-radius: 8px; border: none; background: #238636; color: #fff; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s; }
+        button:hover { background: #2ea043; }
+        #status { margin-top: 15px; font-size: 13px; color: #8b949e; }
     </style>
 </head>
 <body>
 <div class="card">
-    <h2>🚀 التحميل المباشر ⚡️</h2>
-    <input type="url" id="url" placeholder="ضع الرابط هنا...">
-    <button onclick="dl()">تحميل</button>
+    <h2>🚀 التحميل والمسح الذكي ⚡️</h2>
+    <input type="url" id="url" placeholder="ضع رابط الفيديو هنا...">
+    
+    <div class="options">
+        <label class="option-item">
+            <input type="radio" name="fmt" value="video_best" checked>
+            <span>🎬 تحميل أصلي (بدون حقوق تيك توك)</span>
+        </label>
+        <label class="option-item">
+            <input type="radio" name="fmt" value="video_ai">
+            <span>🤖 مسح كامل للنصوص المدمجة (AI Inpainting)</span>
+        </label>
+        <label class="option-item">
+            <input type="radio" name="fmt" value="audio_only">
+            <span>🎵 تحميل الصوت فقط (MP3)</span>
+        </label>
+    </div>
+
+    <button onclick="dl()">بدء التحميل</button>
+    <div id="status"></div>
 </div>
+
 <script>
 function dl(){
     const u = document.getElementById('url').value;
-    if(!u) return alert('أدخل رابطاً!');
-    fetch('/download', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url:u, format_type:'video_best'})})
-    .then(r=>r.blob()).then(b=>{
+    const statusDiv = document.getElementById('status');
+    if(!u) return alert('يرجى إدخال رابط صحيح!');
+    
+    const selectedOption = document.querySelector('input[name="fmt"]:checked').value;
+    let formatType = 'video_best';
+    let removeText = false;
+
+    if(selectedOption === 'video_ai') {
+        formatType = 'video_best';
+        removeText = true;
+        statusDiv.innerText = "🤖 جاري معالجة الفيديو بالذكاء الاصطناعي ومسح النصوص (قد يستغرق لحظات)...";
+    } else if(selectedOption === 'audio_only') {
+        formatType = 'audio_only';
+        statusDiv.innerText = "⏳ جاري استخرج الصوت...";
+    } else {
+        statusDiv.innerText = "⏳ جاري التحميل المباشر...";
+    }
+
+    fetch('/download', {
+        method: 'POST', 
+        headers: {'Content-Type': 'application/json'}, 
+        body: JSON.stringify({url: u, format_type: formatType, remove_text: removeText})
+    })
+    .then(r => {
+        if(!r.ok) throw new Error("تعذر معالجة الرابط");
+        return r.blob();
+    })
+    .then(b => {
         const a = document.createElement('a');
         a.href = URL.createObjectURL(b);
-        a.download = "video.mp4";
+        a.download = (formatType === 'audio_only') ? "audio.mp3" : "video.mp4";
         a.click();
+        statusDiv.innerText = "✅ تم التحميل بنجاح!";
+    })
+    .catch(err => {
+        statusDiv.innerText = "❌ حدث خطأ، يرجى التأكد من الرابط والمحاولة مجدداً.";
     });
 }
 </script>
@@ -193,6 +236,7 @@ function dl(){
 </html>
 """
 
+# --- مسارات Flask ---
 @app.route('/')
 def home():
     return render_template_string(HTML_TEMPLATE)
@@ -202,9 +246,14 @@ def web_download():
     data = request.get_json()
     file_path = None
     try:
-        file_path = download_media(data.get('url'), data.get('format_type', 'video_best'))
+        url = data.get('url')
+        fmt = data.get('format_type', 'video_best')
+        remove_txt = data.get('remove_text', False)
+        
+        file_path = download_media(url, format_type=fmt, remove_text=remove_txt)
         return send_file(file_path, as_attachment=True)
     except Exception as e:
+        logger.error(f"Web Download Error: {e}")
         return jsonify({'error': str(e)}), 400
     finally:
         if file_path and os.path.exists(file_path):
@@ -216,131 +265,27 @@ def run_flask_site():
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, use_reloader=False)
 
-# ----------------------------------------------------
-# 3️⃣ قسم بوت تليجرام (Telegram Bot Engine)
-# ----------------------------------------------------
-user_urls = {}
-
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    save_user(user_id)
-    
-    if is_maintenance() and str(user_id) != str(ADMIN_ID):
-        return await update.message.reply_text("🛠 **البوت يخضع لتحديثات وصيانة سريعة حالياً.**", parse_mode="Markdown")
-
-    welcome_text = "أهلاً بك! أرسل لي أي رابط (تيك توك، إنستغرام، يوتيوب، تويتر) وسأقوم بتحميله لك فوراً ⚡️"
-    keyboard = [
-        [InlineKeyboardButton("🌐 المنصة الإلكترونية", url="https://ab-rbx9.onrender.com")]
-    ]
-    await update.message.reply_text(welcome_text, reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    stats = get_stats()
-    users_count = len(get_all_users())
-    await update.message.reply_text(
-        f"📊 **إحصائيات البوت:**\n\n"
-        f"👥 عدد المستخدمين: `{users_count}`\n"
-        f"📥 إجمالي التحميلات: `{stats.get('downloads', 0)}`",
-        parse_mode="Markdown"
-    )
-
-async def maintenance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    if ADMIN_ID and user_id != str(ADMIN_ID):
-        return await update.message.reply_text("❌ هذا الأمر مخصص لمالك البوت فقط.")
-    
-    status = toggle_maintenance()
-    txt = "🛠 تم **تفعيل** وضع الصيانة وإيقاف البوت." if status else "✅ تم **إلغاء** وضع الصيانة وإعادة تشغيل البوت."
-    await update.message.reply_text(txt, parse_mode="Markdown")
-
-async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    if ADMIN_ID and user_id != str(ADMIN_ID):
-        return await update.message.reply_text("❌ هذا الأمر مخصص لمالك البوت فقط.")
-    
-    msg_to_send = " ".join(context.args)
-    if not msg_to_send:
-        return await update.message.reply_text("💡 اكتب الرسالة بعد الأمر كالتالي:\n`/broadcast أهلاً بكم في البوت`", parse_mode="Markdown")
-    
-    users = get_all_users()
-    success, failed = 0, 0
-    await update.message.reply_text(f"📢 جاري إرسال الإذاعة إلى {len(users)} مستخدم...")
-    
-    for uid in users:
-        try:
-            await context.bot.send_message(chat_id=uid, text=msg_to_send)
-            success += 1
-        except:
-            failed += 1
-            
-    await update.message.reply_text(f"✅ اكتملت الإذاعة!\n\nتم الإرسال لـ: {success}\nفشل الإرسال لـ: {failed}")
+# --- أوامر بوت تليجرام ---
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    save_user(update.effective_user.id)
+    await update.message.reply_text("أهلاً بك! أرسل رابط الفيديو للتحميل المباشر، أو استخدم الموقع للتحميل مع ميزة مسح النصوص بالذكاء الاصطناعي ⚡️")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     save_user(user_id)
-    
-    if is_maintenance() and str(user_id) != str(ADMIN_ID):
-        return await update.message.reply_text("🛠 **البوت يخضع لتحديثات وصيانة سريعة حالياً.**", parse_mode="Markdown")
-
-    url = update.message.text.strip()
+    url = update.message.text
     if not url.startswith("http"):
-        return await update.message.reply_text("يرجى إرسال رابط صحيح يبدأ بـ http 🔗")
+        return
     
-    user_urls[user_id] = url
-    platform_name = detect_platform(url)
-    
-    keyboard = [
-        [InlineKeyboardButton("🎬 تحميل فيديو أصلي (خام)", callback_data="video_best")],
-        [InlineKeyboardButton("✨ تحميل فيديو + تغبيش النص (تجريبي)", callback_data="video_clean_text")],
-        [InlineKeyboardButton("🎵 تحميل صوت فقط MP3", callback_data="audio_only")]
-    ]
-    
-    message_text = f"📍 **المنصة المكتشفة:** {platform_name}\n\n🎉 **اختر صيغة التحميل:**"
-    await update.message.reply_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
-
-async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = query.from_user.id
-    url = user_urls.get(user_id)
-    if not url:
-        return await query.edit_message_text("انتهت الجلسة، يرجى إرسال الرابط مجدداً.")
-    
-    await query.edit_message_text("⏳ جاري التحميل والمعالجة...")
-    file_path = None
+    msg = await update.message.reply_text("⏳ جاري التحميل...")
     try:
-        remove_text_flag = (query.data == "video_clean_text")
-        fmt = "audio_only" if query.data == "audio_only" else "video_best"
-        
-        file_path = download_media(url, format_type=fmt, remove_text=remove_text_flag)
-        
-        file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-        if file_size_mb > 50:
-            await query.message.reply_text("⚠️ حجم الملف أكبر من 50 ميجابايت.")
-            return
-
-        caption_text = "✅ تم التحميل بنجاح بواسطة البوت ⚡️"
-        
-        if fmt == "audio_only":
-            await context.bot.send_audio(chat_id=query.message.chat_id, audio=open(file_path, 'rb'), caption=caption_text)
-        else:
-            await context.bot.send_video(chat_id=query.message.chat_id, video=open(file_path, 'rb'), supports_streaming=True, caption=caption_text)
-        
-        try:
-            await query.message.delete()
-        except:
-            pass
-
+        file_path = download_media(url, format_type="video_best")
+        with open(file_path, 'rb') as video:
+            await update.message.reply_video(video=video, caption="تم التحميل بنجاح ⚡️")
+        await msg.delete()
+        os.remove(file_path)
     except Exception as e:
-        logger.error(f"Error during download: {e}")
-        await query.message.reply_text("❌ تعذر تحميل المقطع أو معالجته.")
-    finally:
-        user_urls.pop(user_id, None)
-        if file_path and os.path.exists(file_path):
-            try: os.remove(file_path)
-            except: pass
-        gc.collect()
+        await msg.edit_text("❌ تعذر تحميل المقطع.")
 
 def main():
     Thread(target=run_flask_site, daemon=True).start()
@@ -348,14 +293,8 @@ def main():
     if not TOKEN: raise ValueError("TELEGRAM_BOT_TOKEN غير متوفر!")
     
     bot_app = Application.builder().token(TOKEN).build()
-    
-    bot_app.add_handler(CommandHandler("start", start_command))
-    bot_app.add_handler(CommandHandler("stats", stats_command))
-    bot_app.add_handler(CommandHandler("broadcast", broadcast_command))
-    bot_app.add_handler(CommandHandler("maintenance", maintenance_command))
-    
+    bot_app.add_handler(CommandHandler("start", start))
     bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    bot_app.add_handler(CallbackQueryHandler(button_click))
     
     bot_app.run_polling()
 
