@@ -122,7 +122,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = "أهلاً بك! أرسل لي أي رابط وسأقوم بتحميله لك فوراً ⚡️"
     keyboard = [
         [InlineKeyboardButton("🔍 جرب التحميل السريع", switch_inline_query="")],
-        [InlineKeyboardButton("🧞‍♂️ الجني الأزرق (@WeWillRevise_bot)", url="https://t.me/WeWillRevise_bot")],
         [InlineKeyboardButton("🌐 المنصة الإلكترونية", url="https://ab-rbx9.onrender.com")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -135,17 +134,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     user_urls[update.effective_user.id] = url
     
-    # قائمة الأزرار مع إضافة زر الجني الأزرق
     keyboard = [
-        [InlineKeyboardButton("⚡️ تحميل فيديو مباشر", callback_data="video_best")],
-        [InlineKeyboardButton("🧞‍♂️ الجني الأزرق - @WeWillRevise_bot", url="https://t.me/WeWillRevise_bot")]
+        [InlineKeyboardButton("⚡️ تحميل فيديو مباشر", callback_data="video_best")]
     ]
     
-    message_text = (
-        "🎉 **اختر خيار التحميل أو افتح البوت الأخر:**\n\n"
-        "🤖 **@WeWillRevise_bot — الجني الازرق**\n\n"
-        "👇 افتحه الان من الزر ادناه."
-    )
+    message_text = "🎉 **اختر خيار التحميل:**"
     
     await update.message.reply_text(message_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
