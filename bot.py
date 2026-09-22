@@ -6,7 +6,7 @@ import subprocess
 import yt_dlp
 from io import BytesIO
 from threading import Thread
-from flask import Flask, send_from_directory
+from flask import Flask, send_from_directory, render_template_string
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -41,13 +41,204 @@ if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
 # ==========================================
-# 1. إعداد سيرفر Flask للاستضافة على Render
+# 1. إعداد سيرفر Flask والواجهة الرسمية للموقع
 # ==========================================
 app = Flask(__name__)
 
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>منصة وبوت سلنقح | للتحميل وتوضيح المقاطع 🇸🇦</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800;900&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Cairo', sans-serif; }
+        body {
+            background: linear-gradient(135deg, #0a1f14 0%, #05100a 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .hero-section {
+            padding: 70px 20px 40px;
+            text-align: center;
+        }
+        .brand-badge {
+            background: rgba(25, 135, 84, 0.2);
+            border: 1px solid #198754;
+            color: #2ecc71;
+            padding: 8px 20px;
+            border-radius: 50px;
+            font-size: 0.95rem;
+            display: inline-block;
+            margin-bottom: 25px;
+        }
+        .hero-title {
+            font-size: 2.6rem;
+            font-weight: 900;
+            margin-bottom: 20px;
+            background: linear-gradient(45deg, #2ecc71, #ffffff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero-subtitle {
+            color: #a0aec0;
+            font-size: 1.15rem;
+            max-width: 650px;
+            margin: 0 auto 35px;
+            line-height: 1.8;
+        }
+        .btn-green {
+            background: #198754;
+            color: white;
+            font-weight: 700;
+            padding: 14px 32px;
+            border-radius: 12px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 25px rgba(25, 135, 84, 0.4);
+            display: inline-block;
+        }
+        .btn-green:hover {
+            background: #146c43;
+            color: white;
+            transform: translateY(-3px);
+        }
+        .stat-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 25px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+        .stat-number {
+            font-size: 2.2rem;
+            font-weight: 800;
+            color: #2ecc71;
+        }
+        .feature-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            padding: 30px 20px;
+            transition: all 0.3s ease;
+            height: 100%;
+        }
+        .feature-card:hover {
+            transform: translateY(-5px);
+            border-color: #198754;
+        }
+        .feature-icon {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+        }
+        footer {
+            margin-top: auto;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 25px 0;
+            text-align: center;
+            color: #718096;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container hero-section">
+        <div class="brand-badge">🇸🇦 منصة وبوت سلنقح الخدمية 🇸🇦</div>
+        <h1 class="hero-title">المنصة الأولى للتحميل والتعديل الذكي المجاني</h1>
+        <p class="hero-subtitle">
+            قم بتحميل الفيديوهات من كافة منصات التواصل الاجتماعي بدون حقوق، بالإضافة لخدمة توضيح المقاطع ورفع الدقة مجاناً وبسرعة فائقة عبر البوت!
+        </p>
+        <div>
+            <a href="https://t.me/{{ bot_username if bot_username else 'bot' }}" target="_blank" class="btn-green">
+                🚀 فتح البوت المباشر في تيليجرام
+            </a>
+        </div>
+    </div>
+
+    <div class="container my-4">
+        <div class="row g-4 justify-content-center">
+            <div class="col-md-4">
+                <div class="stat-card">
+                    <div class="stat-number">{{ downloads_count }}</div>
+                    <div class="text-secondary mt-1">عملية تحميل وتوضيح ناجحة</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card">
+                    <div class="stat-number">{{ users_count }}</div>
+                    <div class="text-secondary mt-1">مستخدم نشط في الخدمة</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card">
+                    <div class="stat-number">🟢 أونلاين</div>
+                    <div class="text-secondary mt-1">حالة السيرفر والخدمة</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container my-5">
+        <h3 class="text-center fw-bold mb-4">✨ مميزات الخدمة</h3>
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="feature-card text-center">
+                    <div class="feature-icon">🎬</div>
+                    <h5 class="fw-bold text-white mb-2">تحميل الفيديوهات</h5>
+                    <p class="text-secondary mb-0">تحميل مباشر من تيك توك، انستقرام، يوتيوب، وباقي المنصات بدون علامة مائية.</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="feature-card text-center">
+                    <div class="feature-icon">⚡</div>
+                    <h5 class="fw-bold text-white mb-2">توضيح ورفع الدقة</h5>
+                    <p class="text-secondary mb-0">معالجة الفيديوهات المحفوظة بجوالك وتوضيح معالمها وإزالة التغبيش مجاناً.</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="feature-card text-center">
+                    <div class="feature-icon">🎨</div>
+                    <h5 class="fw-bold text-white mb-2">بطاقات اليوم الوطني</h5>
+                    <p class="text-secondary mb-0">إنشاء بطاقات تهنئة فورية باسمك بمناسبة اليوم الوطني السعودي 96.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="container">
+            <p class="mb-0">حقوق البرمجة والتطوير محفوظة لمطور الخدمة © 2026 | منصة سلنقح</p>
+        </div>
+    </footer>
+
+</body>
+</html>
+"""
+
 @app.route('/')
 def home():
-    return "Bot is running online!"
+    stats = get_stats()
+    users = set()
+    if os.path.exists(USERS_FILE):
+        try:
+            with open(USERS_FILE, 'r') as f:
+                users = set(json.load(f))
+        except:
+            pass
+    bot_name = os.getenv("BOT_USERNAME", "")
+    return render_template_string(
+        HTML_TEMPLATE,
+        downloads_count=stats.get("downloads", 0),
+        users_count=len(users),
+        bot_username=bot_name
+    )
 
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
@@ -232,7 +423,6 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         await video_file.download_to_drive(input_path)
 
-        # فلتر معالجة يضمن أبعاداً زوجية صحيحة دائماً وترميز صوت شامل
         filter_str = "scale=w='trunc(iw*1.3/2)*2':h='trunc(ih*1.3/2)*2':flags=bicubic,unsharp=3:3:1.0:3:3:0.0,eq=contrast=1.05:saturation=1.1"
 
         ffmpeg_cmd = [
@@ -251,6 +441,7 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
         process = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         if process.returncode == 0 and os.path.exists(output_path):
+            increment_stats()
             await status_msg.edit_text("✅ **تمت المعالجة والتوضيح بنجاح! جاري إرسال المقطع...**")
             
             with open(output_path, 'rb') as video_out:
