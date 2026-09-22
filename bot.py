@@ -6,10 +6,18 @@ import requests
 import time
 import base64
 import yt_dlp
+from io import BytesIO
 from threading import Thread
 from flask import Flask, render_template_string, request, jsonify, send_file
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+
+# التحقق من وجود مكتبة PIL لصناعة البطاقات
+try:
+    from PIL import Image, ImageDraw, ImageFont
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -55,6 +63,31 @@ def clean_url(url):
         clean = clean.replace("/photo/", "/video/")
     return clean
 
+# --- توليد بطاقات التهنئة باليوم الوطني 96 ---
+def generate_national_card(name):
+    width, height = 1080, 1080
+    image = Image.new("RGB", (width, height), color=(0, 108, 53)) # الأخضر السعودي
+    draw = ImageDraw.Draw(image)
+    
+    # رسم إطار ذهبي
+    draw.rectangle([30, 30, width - 30, height - 30], outline=(212, 175, 55), width=10)
+    draw.rectangle([50, 50, width - 50, height - 50], outline=(255, 255, 255), width=2)
+    
+    # نص التهنئة
+    text_header = "🇸🇦 اليوم الوطني السعودي 96 🇸🇦"
+    text_motto = "« عِــزّنَــا بِــطَــبْــعِــنَــا »"
+    text_body = f"نهنئكم بمناسبة اليوم الوطني المجيد\nإهداء خاص إلى: {name}"
+    
+    draw.text((width // 2, 250), text_header, fill=(212, 175, 55), anchor="mm")
+    draw.text((width // 2, 450), text_motto, fill=(255, 255, 255), anchor="mm")
+    draw.text((width // 2, 650), text_body, fill=(212, 175, 55), anchor="mm")
+    
+    bio = BytesIO()
+    bio.name = 'national_day_card.png'
+    image.save(bio, 'PNG')
+    bio.seek(0)
+    return bio
+
 # --- معالجة الذكاء الاصطناعي لمسح النصوص (AI Inpainting) ---
 def process_ai_inpainting(video_path):
     if not REPLICATE_API_TOKEN:
@@ -67,11 +100,9 @@ def process_ai_inpainting(video_path):
             "Content-Type": "application/json"
         }
         
-        # تشفير الفيديو بـ base64
         with open(video_path, 'rb') as f:
             encoded_video = base64.b64encode(f.read()).decode('utf-8')
         
-        # طلب المعالجة عبر رابط النموذج الرسمي المباشر
         upload_req = requests.post(
             "https://api.replicate.com/v1/models/sczhou/propainter/predictions",
             headers=headers,
@@ -89,9 +120,8 @@ def process_ai_inpainting(video_path):
             logger.error(f"خطأ في Replicate: {res_data}")
             return video_path
 
-        # الانتظار لحين اكتمال معالجة الذكاء الاصطناعي
         status_url = f"https://api.replicate.com/v1/predictions/{prediction_id}"
-        for _ in range(60): # أقصى انتظار 2 دقيقة
+        for _ in range(60):
             time.sleep(2)
             check_res = requests.get(status_url, headers=headers).json()
             status = check_res.get("status")
@@ -150,29 +180,119 @@ def download_media(url, format_type="video_best", remove_text=False):
             
         return filename
 
-# --- واجهة الويب (HTML) ---
+# --- واجهة الويب الاحتفالية (HTML / CSS) ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مُحمّل الميديا ومزيل النصوص بالذكاء الاصطناعي ⚡️</title>
+    <title>🇸🇦 اليوم الوطني السعودي 96 | التحميل والمسح الذكي ⚡️</title>
     <style>
-        body { background: #0d1117; color: #fff; font-family: 'Segoe UI', system-ui, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .card { background: #161b22; padding: 30px; border-radius: 16px; text-align: center; width: 90%; max-width: 440px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid #30363d; }
-        h2 { margin-bottom: 20px; color: #58a6ff; font-size: 20px; }
-        input[type="url"] { width: 100%; padding: 14px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #30363d; background: #0d1117; color: #fff; box-sizing: border-box; font-size: 14px; text-align: center; }
-        .options { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; text-align: right; font-size: 14px; color: #8b949e; }
-        .option-item { display: flex; align-items: center; gap: 10px; background: #21262d; padding: 12px; border-radius: 8px; cursor: pointer; }
-        button { width: 100%; padding: 14px; border-radius: 8px; border: none; background: #238636; color: #fff; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s; }
-        button:hover { background: #2ea043; }
-        #status { margin-top: 15px; font-size: 13px; color: #8b949e; }
+        :root {
+            --saudi-green: #006c35;
+            --saudi-gold: #d4af37;
+            --dark-bg: #09130e;
+            --card-bg: #112218;
+            --text-light: #f4f4f4;
+        }
+        body { 
+            background: var(--dark-bg); 
+            color: var(--text-light); 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            display: flex; 
+            flex-direction: column;
+            justify-content: center; 
+            align-items: center; 
+            min-height: 100vh; 
+            margin: 0; 
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .banner {
+            background: linear-gradient(135deg, var(--saudi-green), #00381b);
+            border: 2px solid var(--saudi-gold);
+            border-radius: 12px;
+            padding: 12px 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 460px;
+            box-shadow: 0 4px 20px rgba(212, 175, 55, 0.2);
+        }
+        .banner h3 { margin: 0; color: var(--saudi-gold); font-size: 16px; }
+        .banner p { margin: 4px 0 0 0; font-size: 13px; color: #fff; }
+        
+        .card { 
+            background: var(--card-bg); 
+            padding: 25px; 
+            border-radius: 20px; 
+            text-align: center; 
+            width: 100%; 
+            max-width: 460px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7); 
+            border: 1px solid rgba(212, 175, 55, 0.3); 
+        }
+        h2 { margin-bottom: 15px; color: var(--saudi-gold); font-size: 22px; }
+        
+        input[type="text"], input[type="url"] { 
+            width: 100%; 
+            padding: 14px; 
+            margin-bottom: 15px; 
+            border-radius: 10px; 
+            border: 1px solid var(--saudi-green); 
+            background: #06110a; 
+            color: #fff; 
+            box-sizing: border-box; 
+            font-size: 14px; 
+            text-align: center; 
+        }
+        .options { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; text-align: right; font-size: 14px; }
+        .option-item { display: flex; align-items: center; gap: 10px; background: #0b1a11; padding: 12px; border-radius: 10px; cursor: pointer; border: 1px solid #183323; }
+        
+        .btn-green { 
+            width: 100%; 
+            padding: 14px; 
+            border-radius: 10px; 
+            border: none; 
+            background: linear-gradient(135deg, var(--saudi-green), #00a852); 
+            color: #fff; 
+            font-weight: bold; 
+            font-size: 16px; 
+            cursor: pointer; 
+            transition: 0.2s; 
+            box-shadow: 0 4px 15px rgba(0, 108, 53, 0.4);
+        }
+        .btn-green:hover { filter: brightness(1.1); }
+        .btn-gold {
+            background: linear-gradient(135deg, var(--saudi-gold), #aa8513);
+            color: #000;
+            margin-top: 10px;
+        }
+
+        .tab-buttons { display: flex; gap: 10px; margin-bottom: 20px; width: 100%; max-width: 460px; }
+        .tab-btn { flex: 1; padding: 10px; background: #112218; border: 1px solid var(--saudi-green); color: #fff; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: bold; }
+        .tab-btn.active { background: var(--saudi-green); border-color: var(--saudi-gold); }
+
+        #cardCanvas { display: none; margin: 15px auto; max-width: 100%; border-radius: 12px; border: 2px solid var(--saudi-gold); }
+        #status { margin-top: 15px; font-size: 13px; color: #a0b0a5; }
     </style>
 </head>
 <body>
-<div class="card">
-    <h2>🚀 التحميل والمسح الذكي ⚡️</h2>
+
+<div class="banner">
+    <h3>🇸🇦 اليوم الوطني السعودي 96 | عزّنا بطبعنا 🇸🇦</h3>
+    <p>🎁 هديتنا لكم: ميزة مسح النصوص بالذكاء الاصطناعي مجانية اليوم!</p>
+</div>
+
+<div class="tab-buttons">
+    <button class="tab-btn active" onclick="switchTab('downloader')">🚀 التحميل والمسح</button>
+    <button class="tab-btn" onclick="switchTab('cardGen')">🎨 صانع بطاقات 96</button>
+</div>
+
+<!-- قسم التحميل والذكاء الاصطناعي -->
+<div class="card" id="tab-downloader">
+    <h2>⚡️ محصّد الميديا والمسح الذكي</h2>
     <input type="url" id="url" placeholder="ضع رابط الفيديو هنا...">
     
     <div class="options">
@@ -190,11 +310,34 @@ HTML_TEMPLATE = """
         </label>
     </div>
 
-    <button onclick="dl()">بدء التحميل</button>
+    <button class="btn-green" onclick="dl()">بدء التحميل ⚡️</button>
     <div id="status"></div>
 </div>
 
+<!-- قسم صانع بطاقات اليوم الوطني -->
+<div class="card" id="tab-cardGen" style="display: none;">
+    <h2>🎨 بطاقة تهنئة بالليوم الوطني 96</h2>
+    <input type="text" id="cardName" placeholder="اكتب اسمك هنا (مثال: مناع العسيري)">
+    <button class="btn-green btn-gold" onclick="createCard()">إنشاء البطاقة الفخمة ✨</button>
+    
+    <canvas id="cardCanvas" width="800" height="800"></canvas>
+    <a id="downloadCardBtn" style="display:none;" class="btn-green" download="Saudi_96_Card.png">📥 تحميل البطاقة</a>
+</div>
+
 <script>
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    if(tab === 'downloader') {
+        document.getElementById('tab-downloader').style.display = 'block';
+        document.getElementById('tab-cardGen').style.display = 'none';
+        event.target.classList.add('active');
+    } else {
+        document.getElementById('tab-downloader').style.display = 'none';
+        document.getElementById('tab-cardGen').style.display = 'block';
+        event.target.classList.add('active');
+    }
+}
+
 function dl(){
     const u = document.getElementById('url').value;
     const statusDiv = document.getElementById('status');
@@ -235,6 +378,48 @@ function dl(){
         statusDiv.innerText = "❌ حدث خطأ، يرجى التأكد من الرابط والمحاولة مجدداً.";
     });
 }
+
+function createCard() {
+    const name = document.getElementById('cardName').value || "محب الوطن";
+    const canvas = document.getElementById('cardCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // خلفية خضراء داكنة
+    ctx.fillStyle = "#005228";
+    ctx.fillRect(0, 0, 800, 800);
+
+    // إطار ذهبي
+    ctx.strokeStyle = "#d4af37";
+    ctx.lineWidth = 12;
+    ctx.strokeRect(30, 30, 740, 740);
+
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(45, 45, 710, 710);
+
+    // نصوص البطاقة
+    ctx.fillStyle = "#d4af37";
+    ctx.font = "bold 40px 'Segoe UI', Tahoma";
+    ctx.textAlign = "center";
+    ctx.fillText("🇸🇦 اليوم الوطني السعودي 96 🇸🇦", 400, 180);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 55px 'Segoe UI', Tahoma";
+    ctx.fillText("« عِــزّنَــا بِــطَــبْــعِــنَــا »", 400, 320);
+
+    ctx.fillStyle = "#d4af37";
+    ctx.font = "28px 'Segoe UI', Tahoma";
+    ctx.fillText("تهنئة خاصة بمناسبة اليوم الوطني المجيد", 400, 480);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 38px 'Segoe UI', Tahoma";
+    ctx.fillText(name, 400, 560);
+
+    canvas.style.display = 'block';
+    const btn = document.getElementById('downloadCardBtn');
+    btn.href = canvas.toDataURL('image/png');
+    btn.style.display = 'block';
+}
 </script>
 </body>
 </html>
@@ -269,10 +454,49 @@ def run_flask_site():
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, use_reloader=False)
 
-# --- أوامر بوت تليجرام ---
+# --- أوامر بوت تليجرام المحدثة باليوم الوطني ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_user(update.effective_user.id)
-    await update.message.reply_text("أهلاً بك! أرسل رابط الفيديو للتحميل المباشر، أو استخدم الموقع للتحميل مع ميزة مسح النصوص بالذكاء الاصطناعي ⚡️")
+    
+    keyboard = [
+        [InlineKeyboardButton("🚀 زيارة موقع التحميل والمسح الذكي", url="https://ab-rbx9.onrender.com")],
+        [InlineKeyboardButton("🎨 إنشاء بطاقة تهنئة باليوم الوطني", callback_data="make_card")],
+        [InlineKeyboardButton("🟢 مشاركة البوت مع الأصدقاء", callback_data="share_bot")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    welcome_text = (
+        "🇸🇦 **كل عام والوطن بألف خير | اليوم الوطني السعودي 96** 🇸🇦\n\n"
+        "أهلاً بك في بوت التحميل والمسح الذكي! ⚡️\n"
+        "• أرسل رابط الفيديو للتحميل المباشر خالي من الحقوق.\n"
+        "• أو استخدم الموقع لمسح الكتابة والنصوص بالذكاء الاصطناعي مجاناً! 💚"
+    )
+    await update.message.reply_text(welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
+
+async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "make_card":
+        await query.message.reply_text("لإنشاء بطاقة تهنئة باسمك، اكتب الأمر كالتالي:\n\n`/card اسمك`\nمثال: `/card مناع`", parse_mode="Markdown")
+    elif query.data == "share_bot":
+        share_url = f"https://t.me/share/url?url=https://t.me/{context.bot.username}&text=جرّب%20بوت%20التحميل%20ومسح%20النصوص%20بالذكاء%20الاصطناعي%20بمناسبة%20اليوم%20الوطني%2096%20🇸🇦"
+        kb = [[InlineKeyboardButton("📲 إرسال إلى الواتساب / تليجرام", url=share_url)]]
+        await query.message.reply_text("انشر البوت لأصدقائك واحتفلوا باليوم الوطني! 💚", reply_markup=InlineKeyboardMarkup(kb))
+
+async def card_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    name = " ".join(context.args) if context.args else update.effective_user.first_name
+    
+    if HAS_PIL:
+        msg = await update.message.reply_text("⏳ جاري تصميم بطاقتك الفخمة...")
+        try:
+            card_img = generate_national_card(name)
+            await update.message.reply_photo(photo=card_img, caption=f"🇸🇦 بطاقة تهنئة بالليوم الوطني 96 إهداء لـ **{name}** ✨", parse_mode="Markdown")
+            await msg.delete()
+        except Exception as e:
+            await msg.edit_text(f"🇸🇦 **اليوم الوطني السعودي 96 | عزّنا بطبعنا**\n\nنهنئكم بمناسبة اليوم الوطني المجيد!\nإهداء خاص إلى: **{name}** 💚")
+    else:
+        await update.message.reply_text(f"🇸🇦 **اليوم الوطني السعودي 96 | عزّنا بطبعنا**\n\nنهنئكم بمناسبة اليوم الوطني المجيد!\nإهداء خاص إلى: **{name}** 💚", parse_mode="Markdown")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -281,11 +505,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not url.startswith("http"):
         return
     
-    msg = await update.message.reply_text("⏳ جاري التحميل...")
+    msg = await update.message.reply_text("⏳ جاري التحميل المباشر...")
     try:
         file_path = download_media(url, format_type="video_best")
         with open(file_path, 'rb') as video:
-            await update.message.reply_video(video=video, caption="تم التحميل بنجاح ⚡️")
+            await update.message.reply_video(video=video, caption="تم التحميل بنجاح ⚡️\n🇸🇦 دام عزك يا وطن 🇸🇦")
         await msg.delete()
         os.remove(file_path)
     except Exception as e:
@@ -298,6 +522,8 @@ def main():
     
     bot_app = Application.builder().token(TOKEN).build()
     bot_app.add_handler(CommandHandler("start", start))
+    bot_app.add_handler(CommandHandler("card", card_command))
+    bot_app.add_handler(CallbackQueryHandler(button_click))
     bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     bot_app.run_polling()
