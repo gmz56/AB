@@ -123,29 +123,29 @@ def save_referral(referrer_id, referred_id):
             json.dump(refs, f)
 
 # ==========================================
-# 4. قاعدة بيانات الخلفيات الـ 15 (4K)
+# 4. قاعدة بيانات الخلفيات الـ 15 (روابط صور حقيقية ومباشرة)
 # ==========================================
 WALLPAPERS_DB = {
     "movies": [
-        {"id": 1, "title": "Ragnar Lothbrok - Vikings", "url": "https://your-domain.com/images/vikings.jpg"},
-        {"id": 2, "title": "Dexter - Tonight's The Night", "url": "https://your-domain.com/images/dexter.jpg"},
-        {"id": 3, "title": "The Mentalist - Patrick Jane", "url": "https://your-domain.com/images/mentalist.jpg"}
+        {"id": 1, "title": "Ragnar Lothbrok - Vikings", "url": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=1200"},
+        {"id": 2, "title": "Dexter - Tonight's The Night", "url": "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=1200"},
+        {"id": 3, "title": "The Mentalist - Patrick Jane", "url": "https://images.unsplash.com/photo-1485846234645-a62644f84728?q=80&w=1200"}
     ],
     "anime": [
-        {"id": 4, "title": "العين الحمراء المتوهجة", "url": "https://your-domain.com/images/red_eye.jpg"},
-        {"id": 5, "title": "شاب على السيارة تحت سماء الليل", "url": "https://your-domain.com/images/boy_car.jpg"},
-        {"id": 6, "title": "فتاة حقل اليراعات عند الغروب", "url": "https://your-domain.com/images/fireflies.jpg"},
-        {"id": 7, "title": "فتاة النافذة والمطر", "url": "https://your-domain.com/images/window_rain.jpg"},
-        {"id": 8, "title": "وجه المانغا بالأبيض والأسود", "url": "https://your-domain.com/images/manga_face.jpg"},
-        {"id": 9, "title": "فان التخييم تحت سماء الليل والقمر", "url": "https://your-domain.com/images/camper_van.jpg"},
-        {"id": 10, "title": "فتاة الشعر الأبيض والزهرة", "url": "https://your-domain.com/images/white_hair.jpg"}
+        {"id": 4, "title": "العين الحمراء المتوهجة", "url": "https://images.unsplash.com/photo-1578632767115-351597cf2477?q=80&w=1200"},
+        {"id": 5, "title": "شاب على السيارة تحت سماء الليل", "url": "https://images.unsplash.com/photo-1503376780353-7e6692767b70?q=80&w=1200"},
+        {"id": 6, "title": "فتاة حقل اليراعات عند الغروب", "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1200"},
+        {"id": 7, "title": "فتاة النافذة والمطر", "url": "https://images.unsplash.com/photo-1519692933481-e162a57d6721?q=80&w=1200"},
+        {"id": 8, "title": "وجه المانغا بالأبيض والأسود", "url": "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?q=80&w=1200"},
+        {"id": 9, "title": "فان التخييم تحت سماء الليل والقمر", "url": "https://images.unsplash.com/photo-1526772662000-3f88f10405ff?q=80&w=1200"},
+        {"id": 10, "title": "فتاة الشعر الأبيض والزهرة", "url": "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=1200"}
     ],
     "dark": [
-        {"id": 11, "title": "الكسوف والكوكب فوق الجبال", "url": "https://your-domain.com/images/eclipse.jpg"},
-        {"id": 12, "title": "الشخصية الغامضة والتاج الأسود", "url": "https://your-domain.com/images/black_crown.jpg"},
-        {"id": 13, "title": "التأمل وسط البحر والضباب", "url": "https://your-domain.com/images/sea_meditation.jpg"},
-        {"id": 14, "title": "المجسم الكرومي اللامع", "url": "https://your-domain.com/images/chrome.jpg"},
-        {"id": 15, "title": "الشخصية الغامضة خلف السلاسل", "url": "https://your-domain.com/images/chains.jpg"}
+        {"id": 11, "title": "الكسوف والكوكب فوق الجبال", "url": "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?q=80&w=1200"},
+        {"id": 12, "title": "الشخصية الغامضة والتاج الأسود", "url": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=1200"},
+        {"id": 13, "title": "التأمل وسط البحر والضباب", "url": "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?q=80&w=1200"},
+        {"id": 14, "title": "المجسم الكرومي اللامع", "url": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1200"},
+        {"id": 15, "title": "الشخصية الغامضة خلف السلاسل", "url": "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=1200"}
     ]
 }
 
@@ -154,7 +154,7 @@ WALLPAPERS_DB = {
 # ==========================================
 WELCOME_TEXT = (
     "🇸🇦 **كل عام والوطن بألف خير | اليوم الوطني السعودي 96** 🇸🇦\n\n"
-    "أهلاً بك في بوت وموقع التحميل والمسح الذكي المجاني! ⚡\n\n"
+    "أهلاً بك في بوت سلنقح للتحميل والمسح الذكي المجاني! ⚡\n\n"
     "• أرسل رابط الفيديو للتحميل المباشر خالي من الحقوق.\n"
     "• أو استخدم الموقع لمسح الكتابة والنصوص بالذكاء الاصطناعي مجاناً! 💚\n\n"
     "🛡 حقوق البرمجة والتطوير محفوظة لمطور الخدمة ©"
@@ -168,7 +168,7 @@ def get_main_keyboard(user_id):
         [InlineKeyboardButton("🖼 قسم خلفيات 4K عالية الدقة", callback_data="wp_main")],
         [InlineKeyboardButton(f"🎁 رابط الدعوة الخاص بك ({ref_count} مدعوين)", callback_data="cmd_ref")],
         [InlineKeyboardButton("📜 شروط الاستخدام وإخلاء المسؤولية", callback_data="cmd_terms")],
-        [InlineKeyboardButton("🟢 مشاركة البوت مع الأصدقاء", switch_inline_query="🚀 جرب هذا البوت الرائع لتحميل المقاطع واستعراض خلفيات الـ 4K!")]
+        [InlineKeyboardButton("🟢 مشاركة البوت مع الأصدقاء", switch_inline_query="🚀 جرب بوت سلنقح المباشر لتحميل المقاطع واستعراض خلفيات الـ 4K!")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -179,7 +179,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     save_user(user_id)
     
-    # تسجيل الإحالة عند الدخول من رابط مشاركة
     if context.args:
         referrer_id = context.args[0]
         if referrer_id != str(user_id):
@@ -195,7 +194,6 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
     bot_username = context.bot.username or "bot"
     await query.answer()
 
-    # --- القائمة الرئيسية ---
     if data == "cmd_main":
         await query.edit_message_text(
             WELCOME_TEXT,
@@ -203,7 +201,6 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
             parse_mode="Markdown"
         )
 
-    # --- إنشاء بطاقة ---
     elif data == "cmd_card":
         text = (
             "🎨 **إنشاء بطاقة تهنئة باليوم الوطني:**\n\n"
@@ -213,7 +210,6 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="cmd_main")]])
         await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
 
-    # --- رابط الدعوة والإحالات ---
     elif data == "cmd_ref":
         ref_link = f"https://t.me/{bot_username}?start={user_id}"
         ref_count = get_user_ref_count(user_id)
@@ -226,7 +222,6 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="cmd_main")]])
         await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
 
-    # --- شروط الاستخدام ---
     elif data == "cmd_terms":
         text = (
             "📜 **شروط الاستخدام وإخلاء المسؤولية:**\n\n"
@@ -237,13 +232,12 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="cmd_main")]])
         await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
 
-    # --- التصفح داخل قسم الخلفيات ---
     elif data == "wp_main":
         keyboard = [
             [InlineKeyboardButton("🎬 مسلسلات وسينما (3)", callback_data="wp_cat_movies")],
             [InlineKeyboardButton("🎨 أنمي وفن رقمي (7)", callback_data="wp_cat_anime")],
             [InlineKeyboardButton("🌌 أنماط داكنة وفضاء (5)", callback_data="wp_cat_dark")],
-            [InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="cmd_main")]
+            [InlineKeyboardButton("🔙 العودة لقائمة الخدمات", callback_data="cmd_main")]
         ]
         text = "🎨 **قسم الخلفيات عالية الدقة (4K):**\n\nاختر التصنيف المفضل لديك:"
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
@@ -263,11 +257,15 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
         img_id = int(img_id)
         item = next((x for x in WALLPAPERS_DB[category] if x["id"] == img_id), None)
         if item:
-            await query.message.reply_photo(
-                photo=item["url"],
-                caption=f"🖼 **{item['title']}**\n\n✨ بدقة عالية 4K",
-                parse_mode="Markdown"
-            )
+            try:
+                await query.message.reply_photo(
+                    photo=item["url"],
+                    caption=f"🖼 **{item['title']}**\n\n✨ بدقة عالية 4K",
+                    parse_mode="Markdown"
+                )
+            except Exception as e:
+                logger.error(f"Error sending wallpaper: {e}")
+                await query.message.reply_text("❌ تعذر تحميل هذه الصورة حالياً، جرب خلفية أخرى.")
 
 # ==========================================
 # 7. صناعة البطاقات (Card Generation / PIL)
@@ -275,7 +273,7 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
 def create_card_image(text_content):
     if not HAS_PIL:
         return None
-    img = Image.new('RGB', (800, 400), color=(15, 81, 50)) # لون خضراء لليوم الوطني
+    img = Image.new('RGB', (800, 400), color=(15, 81, 50))
     d = ImageDraw.Draw(img)
     d.text((50, 180), f"{text_content}", fill=(255, 255, 255))
     bio = BytesIO()
@@ -304,7 +302,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             id="1",
             title="مشاركة بوت اليوم الوطني والتحميل",
             input_message_content=InputTextMessageContent(
-                "🇸🇦 جرب بوت وموقع التحميل والمسح الذكي المجاني بالذكاء الاصطناعي وخلفيات 4K!"
+                "🇸🇦 جرب بوت سلنقح المجاني للتحميل ومسح الذكاء الاصطناعي وخلفيات 4K!"
             )
         )
     ]
@@ -355,7 +353,6 @@ def main():
 
     bot_app = Application.builder().token(TOKEN).build()
 
-    # تسجيل الأوامر والـ Handlers
     bot_app.add_handler(CommandHandler("start", start))
     bot_app.add_handler(CommandHandler("card", card_command))
     bot_app.add_handler(CommandHandler("wallpapers", start))
