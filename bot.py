@@ -132,9 +132,9 @@ def save_referral(referrer_id, referred_id):
 # ==========================================
 WELCOME_TEXT = (
     "🇸🇦 **كل عام والوطن بألف خير | اليوم الوطني السعودي 96** 🇸🇦\n\n"
-    "أهلاً بك في بوت سلنقح للتحميل والتوضيح المجاني بالكامل! ⚡\n\n"
+    "أهلاً بك في بوت سلنقح للتحميل والتوضيح السريع المجاني! ⚡\n\n"
     "• **لتحميل فيديو من التواصل:** أرسل رابط المقطع مباشرة.\n"
-    "• **لتوضيح ورفع دقة فيديو بجوالك:** أرسل ملف الفيديو هنا فوراً وسيقوم البوت بمعالجته وتوضيحه مجاناً! 🎬\n\n"
+    "• **لتوضيح ورفع دقة فيديو بجوالك:** أرسل ملف الفيديو هنا فوراً وسيقوم البوت بمعالجته بشكل سريع ومجاني! 🎬\n\n"
     "🛡 حقوق البرمجة والتطوير محفوظة لمطور الخدمة ©"
 )
 
@@ -206,13 +206,13 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
 
 # ==========================================
-# 6. التوضيح والمُعالجة المجانية المباشرة (FFmpeg)
+# 6. التوضيح والمُعالجة السريعة المجانية (FFmpeg Optimized)
 # ==========================================
 async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     save_user(user_id)
 
-    status_msg = await update.message.reply_text("⏳ **جاري تنزيل الفيديو وتجهيزه للتوضيح...**")
+    status_msg = await update.message.reply_text("⚡ **جاري تنزيل الفيديو وتوضيحه بسرعة...**")
 
     input_path = None
     output_path = None
@@ -232,19 +232,15 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         await video_file.download_to_drive(input_path)
 
-        await status_msg.edit_text("⚡ **جاري مضاعفة دقة الفيديو وإزالة التغبيش وتحسين حدة الألوان مجاناً...**")
-
-        # أمر FFmpeg لمعالجة الفيديو وتوضيحه ورفع الدقة
-        # 1. scale=iw*2:ih*2:flags=lanczos -> مضاعفة دقة الفيديو
-        # 2. unsharp=5:5:1.5:5:5:0.0 -> توضيح الحواف وإزالة التغبيش
-        # 3. eq=contrast=1.1:saturation=1.15 -> تحسين الألوان والتباين
+        # أمر FFmpeg محسن لمعالجة سريعة جداً بدون ضغط على السيرفر
         ffmpeg_cmd = [
             "ffmpeg", "-y",
             "-i", input_path,
-            "-vf", "scale=iw*2:ih*2:flags=lanczos,unsharp=5:5:1.5:5:5:0.0,eq=contrast=1.1:saturation=1.15",
+            "-vf", "scale=iw*1.5:ih*1.5:flags=bicubic,unsharp=3:3:1.2:3:3:0.0,eq=contrast=1.08:saturation=1.1",
             "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "18",
+            "-preset", "ultrafast",
+            "-crf", "22",
+            "-threads", "0",
             "-c:a", "copy",
             output_path
         ]
@@ -257,20 +253,19 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
             with open(output_path, 'rb') as video_out:
                 await update.message.reply_video(
                     video=video_out,
-                    caption="⚡ **تم رفع دقة الفيديو وتوضيح معالمه بنجاح (مجاناً 100%)!**"
+                    caption="⚡ **تم رفع دقة الفيديو وتوضيح معالمه بنجاح!**"
                 )
             await status_msg.delete()
         else:
             err = process.stderr.decode('utf-8', errors='ignore')
             logger.error(f"FFmpeg error: {err}")
-            await status_msg.edit_text("❌ متعذر معالجة هذا النوع من صيغ الفيديوهات، يرجى تجربة مقطع آخر.")
+            await status_msg.edit_text("❌ متعذر معالجة هذا الفيديو، يرجى تجربة مقطع آخر.")
 
     except Exception as e:
         logger.error(f"Error processing video: {e}")
         await status_msg.edit_text(f"❌ **حدث خطأ أثناء معالجة الفيديو:**\n`{str(e)}`", parse_mode="Markdown")
     
     finally:
-        # تنظيف الملفات المؤقتة
         for p in [input_path, output_path]:
             if p and os.path.exists(p):
                 try:
@@ -373,7 +368,7 @@ def main():
     bot_app.add_handler(MessageHandler(filters.VIDEO | filters.Document.VIDEO, handle_video_upload))
     bot_app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-    print("🤖 البوت يعمل بنجاح ومستعد لاستقبال المقاطع وتوضيحها مجاناً...")
+    print("🤖 البوت يعمل بنجاح ومستعد لاستقبال المقاطع وتوضيحها بسرعة...")
     bot_app.run_polling()
 
 if __name__ == "__main__":
