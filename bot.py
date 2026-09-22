@@ -9,8 +9,8 @@ import yt_dlp
 from io import BytesIO
 from threading import Thread
 from flask import Flask, render_template_string, request, jsonify, send_file
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultArticle, InputTextMessageContent
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, InlineQueryHandler, filters, ContextTypes
 
 # التحقق من وجود مكتبة PIL لصناعة البطاقات
 try:
@@ -25,10 +25,12 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 COUNTER_FILE = "stats.json"
 USERS_FILE = "users.json"
+REFERRALS_FILE = "referrals.json"
+
 ADMIN_ID = os.getenv("ADMIN_ID")
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 
-# --- إدارة الإحصائيات والمستخدمين ---
+# --- إدارة الإحصائيات والمستخدمين والإحالات ---
 def get_stats():
     if os.path.exists(COUNTER_FILE):
         try:
@@ -56,6 +58,37 @@ def save_user(user_id):
     users.add(user_id)
     with open(USERS_FILE, 'w') as f:
         json.dump(list(users), f)
+
+def get_referrals():
+    if os.path.exists(REFERRALS_FILE):
+        try:
+            with open(REFERRALS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+def add_referral(referrer_id, new_user_id):
+    ref_data = get_referrals()
+    referrer_str = str(referrer_id)
+    new_user_str = str(new_user_id)
+    
+    if referrer_str != new_user_str:
+        if referrer_str not in ref_data:
+            ref_data[referrer_str] = []
+        
+        # التأكد من أن المستخدم الجديد لم يتم دعوته مسبقاً
+        all_referred = [uid for sublist in ref_data.values() for uid in sublist]
+        if new_user_str not in all_referred:
+            ref_data[referrer_str].append(new_user_str)
+            with open(REFERRALS_FILE, 'w') as f:
+                json.dump(ref_data, f)
+            return True
+    return False
+
+def get_user_ref_count(user_id):
+    ref_data = get_referrals()
+    return len(ref_data.get(str(user_id), []))
 
 def clean_url(url):
     clean = url.split("?")[0].strip()
@@ -275,7 +308,6 @@ HTML_TEMPLATE = """
         #cardCanvas { display: none; margin: 15px auto; max-width: 100%; border-radius: 12px; border: 2px solid var(--saudi-gold); }
         #status { margin-top: 15px; font-size: 13px; color: #a0b0a5; }
 
-        /* حقوق الملكية وإخلاء المسؤولية */
         .footer-rights {
             margin-top: 25px;
             width: 100%;
@@ -311,7 +343,6 @@ HTML_TEMPLATE = """
     <button class="tab-btn" onclick="switchTab('cardGen')">🎨 صانع بطاقات 96</button>
 </div>
 
-<!-- قسم التحميل والذكاء الاصطناعي -->
 <div class="card" id="tab-downloader">
     <h2>⚡️ تحميل الميديا والمسح الذكي</h2>
     <input type="url" id="url" placeholder="ضع رابط الفيديو هنا...">
@@ -335,7 +366,6 @@ HTML_TEMPLATE = """
     <div id="status"></div>
 </div>
 
-<!-- قسم صانع بطاقات اليوم الوطني -->
 <div class="card" id="tab-cardGen" style="display: none;">
     <h2>🎨 بطاقة تهنئة باليوم الوطني 96</h2>
     <input type="text" id="cardName" placeholder="اكتب اسمك هنا">
@@ -345,12 +375,11 @@ HTML_TEMPLATE = """
     <a id="downloadCardBtn" style="display:none;" class="btn-green" download="Saudi_96_Card.png">📥 تحميل البطاقة مجاناً</a>
 </div>
 
-<!-- قسم الحقوق وإخلاء المسؤولية -->
 <div class="footer-rights">
     <p>جميع الحقوق محفوظة وتعود لمطور الخدمة الأصلي © 2026 🇸🇦</p>
     <div class="disclaimer">
         ⚠️ <b>إخلاء مسؤولية وشروط الاستخدام:</b><br>
-        هذا الموقع والبوت أداة تقنية مخصصة للاستخدام الشخصي والتعديل على المحتوى الخاص بك. لا يتم تخزين أو استضافة أي ملفات فيديو أو صوت على خوادمنا نهائياً (تُحذف تلقائياً فوراً). المستخدم يتحمل كامل المسؤولية القانونية والأخلاقية عن طريقة استخدامه للمحتوى ونشره.
+        هذا الموقع والبوت أداة تقنية مخصصة للاستخدام الشخصي والتعديل على المحتوى الخاص بك. لا يتم تخزين أو استضافة أي ملفات فيديو أو صوت على خوادمنا نهائياً. المستخدم يتحمل كامل المسؤولية القانونية والأخلاقية.
     </div>
 </div>
 
@@ -481,13 +510,35 @@ def run_flask_site():
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, use_reloader=False)
 
-# --- أوامر بوت تليجرام ---
+# --- أوامر وتفاعلات بوت تليجرام ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    save_user(update.effective_user.id)
+    user_id = update.effective_user.id
+    save_user(user_id)
+    
+    # معالجة رابط الدعوة والإحالة عند الدخول
+    if context.args:
+        arg = context.args[0]
+        if arg.startswith("ref_"):
+            try:
+                referrer_id = int(arg.replace("ref_", ""))
+                if add_referral(referrer_id, user_id):
+                    try:
+                        await context.bot.send_message(
+                            chat_id=referrer_id,
+                            text=f"🎉 **انضم مستخدم جديد عبر رابطك!**\nإجمالي أصدقائك المدعوين حتى الآن: **{get_user_ref_count(referrer_id)}** 🚀",
+                            parse_mode="Markdown"
+                        )
+                    except Exception as e:
+                        logger.error(f"فشل إرسال إشعار الإحالة: {e}")
+            except ValueError:
+                pass
+
+    ref_count = get_user_ref_count(user_id)
     
     keyboard = [
         [InlineKeyboardButton("🚀 زيارة موقع التحميل والمسح الذكي", url="https://ab-rbx9.onrender.com")],
         [InlineKeyboardButton("🎨 إنشاء بطاقة تهنئة باليوم الوطني", callback_data="make_card")],
+        [InlineKeyboardButton(f"🎁 رابط الدعوة الخاص بك ({ref_count} مدعوين)", callback_data="my_ref")],
         [InlineKeyboardButton("📜 شروط الاستخدام وإخلاء المسؤولية", callback_data="terms")],
         [InlineKeyboardButton("🟢 مشاركة البوت مع الأصدقاء", callback_data="share_bot")]
     ]
@@ -505,9 +556,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    user_id = query.from_user.id
     
     if query.data == "make_card":
         await query.message.reply_text("لإنشاء بطاقة تهنئة باسمك مجاناً، اكتب الأمر كالتالي:\n\n`/card اسمك`\nمثال: `/card مناع`", parse_mode="Markdown")
+    elif query.data == "my_ref":
+        ref_count = get_user_ref_count(user_id)
+        bot_username = context.bot.username or "amxnfj37BOT"
+        ref_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+        
+        ref_msg = (
+            f"🎁 **رابط الإحالة والدعوة الخاص بك:**\n\n"
+            f"`{ref_link}`\n\n"
+            f"📊 عدد الأصدقاء الذين دخلوا عبر رابطك: **{ref_count}**\n\n"
+            f"انشر الرابط في الجروبات ومع أصدقائك لزيادة انتشاره ودعم البوت! 🚀"
+        )
+        await query.message.reply_text(ref_msg, parse_mode="Markdown")
     elif query.data == "terms":
         terms_text = (
             "⚖️ **شروط الاستخدام وإخلاء المسؤولية القانونية:**\n\n"
@@ -521,6 +585,42 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         share_url = f"https://t.me/share/url?url=https://t.me/{context.bot.username}&text=جرّب%20بوت%20التحميل%20ومسح%20النصوص%20بالذكاء%20الاصطناعي%20المجاني%20بمناسبة%20اليوم%20الوطني%2096%20🇸🇦"
         kb = [[InlineKeyboardButton("📲 إرسال إلى الواتساب / تليجرام", url=share_url)]]
         await query.message.reply_text("انشر البوت لأصدقائك مجاناً واحتفلوا باليوم الوطني! 💚", reply_markup=InlineKeyboardMarkup(kb))
+
+# --- النمط المباشر (Inline Mode) ---
+async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query_text = update.inline_query.query.strip()
+    bot_username = context.bot.username or "amxnfj37BOT"
+    results = []
+
+    if not query_text:
+        results.append(
+            InlineQueryResultArticle(
+                id="1",
+                title="⚡️ مشاركة بوت التحميل والمسح الذكي",
+                description="اضغط هنا لإرسال رابط البوت لأصدقائك في هذه المحادثة",
+                input_message_content=InputTextMessageContent(
+                    f"🇸🇦 **بوت سلنقح للتحميل والمسح الذكي ⚡️**\n\n"
+                    f"حمل مقاطع تيك توك بدون حقوق ونظف الفيديوهات بالذكاء الاصطناعي مجاناً!\n\n"
+                    f"رابط البوت: https://t.me/{bot_username}",
+                    parse_mode="Markdown"
+                )
+            )
+        )
+    else:
+        results.append(
+            InlineQueryResultArticle(
+                id="2",
+                title="🎬 رابط جاهز للمعالجة",
+                description=f"إرسال الرابط للبوت: {query_text[:30]}...",
+                input_message_content=InputTextMessageContent(
+                    f"⚡️ **رابط للتحميل والتنظيف:**\n{query_text}\n\n"
+                    f"اضغط على البوت لتنظيف المقاطع والتحميل مجاناً: @{bot_username}",
+                    parse_mode="Markdown"
+                )
+            )
+        )
+
+    await update.inline_query.answer(results, cache_time=1)
 
 async def card_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = " ".join(context.args) if context.args else update.effective_user.first_name
@@ -562,6 +662,7 @@ def main():
     bot_app.add_handler(CommandHandler("start", start))
     bot_app.add_handler(CommandHandler("card", card_command))
     bot_app.add_handler(CallbackQueryHandler(button_click))
+    bot_app.add_handler(InlineQueryHandler(inline_query_handler))
     bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     bot_app.run_polling()
