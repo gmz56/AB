@@ -231,6 +231,12 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     try:
         video_obj = update.message.video or update.message.document
+        
+        # التحقق من حجم الفيديو (تنبيه عند تجاوز 20MB)
+        if hasattr(video_obj, 'file_size') and video_obj.file_size > 20 * 1024 * 1024:
+            await status_msg.edit_text("⚠️ **حجم الفيديو يتجاوز 20 ميجابايت.** يرجى إرسال مقطع بحجم أصغر.")
+            return
+
         video_file = await context.bot.get_file(video_obj.file_id)
         
         file_name = f"user_{user_id}_{int(time.time())}.mp4"
@@ -240,7 +246,6 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
         public_video_url = f"{WEB_SITE_URL}/uploads/{file_name}"
         await status_msg.edit_text("✨ **جاري تحسين الفيديو ورفعه لـ 4K وإزالة التغبيش عبر الذكاء الاصطناعي...**\n قد يستغرق ذلك دقيقة.")
 
-        # استدعاء نموذج الذكاء الاصطناعي لرفع جودة الفيديو عبر Replicate API
         headers = {
             "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
             "Content-Type": "application/json"
@@ -257,13 +262,13 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
         resp = requests.post("https://api.replicate.com/v1/predictions", headers=headers, json=payload, timeout=20)
         prediction = resp.json()
 
-        if "id" not in prediction:
-            raise Exception("فشل في بدء عملية الذكاء الاصطناعي.")
+        if resp.status_code != 201 and resp.status_code != 200:
+            error_detail = prediction.get("detail") or prediction.get("error") or str(prediction)
+            raise Exception(f"Replicate API Error [{resp.status_code}]: {error_detail}")
 
         prediction_id = prediction["id"]
         poll_url = f"https://api.replicate.com/v1/predictions/{prediction_id}"
 
-        # انتظار انتهاء المعالجة
         output_url = None
         for _ in range(30):
             time.sleep(5)
@@ -274,12 +279,12 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
                 output_url = poll_resp.get("output")
                 break
             elif status == "failed":
-                raise Exception("فشلت معالجة المقطع بواسطة نموذج الذكاء الاصطناعي.")
+                err_msg = poll_resp.get("error", "فشلت عملية المعالجة")
+                raise Exception(f"الذكاء الاصطناعي: {err_msg}")
 
         if output_url:
             await status_msg.edit_text("✅ **تمت المعالجة بنجاح! جاري إرسال المقطع بكامل الجودة...**")
             
-            # تنزيل الفيديو المعدل وإرساله للمستخدم
             enhanced_data = requests.get(output_url).content
             out_bio = BytesIO(enhanced_data)
             out_bio.name = "enhanced_4k_video.mp4"
@@ -294,11 +299,14 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     except Exception as e:
         logger.error(f"Error enhancing video: {e}")
-        await status_msg.edit_text("❌ حدث خطأ أثناء معالجة الفيديو. تأكد من إعداد مفتاح API ومساحة الملف.")
+        await status_msg.edit_text(f"❌ **حدث خطأ أثناء معالجة الفيديو:**\n`{str(e)}`", parse_mode="Markdown")
     
     finally:
         if 'local_path' in locals() and os.path.exists(local_path):
-            os.remove(local_path)
+            try:
+                os.remove(local_path)
+            except:
+                pass
 
 # ==========================================
 # 7. صناعة البطاقات (Card Generation / PIL)
