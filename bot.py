@@ -1,19 +1,16 @@
 import os
 import json
 import logging
-import gc
-import requests
 import time
-import base64
+import subprocess
 import yt_dlp
 from io import BytesIO
 from threading import Thread
-from flask import Flask, render_template_string, request, jsonify, send_from_directory
+from flask import Flask, send_from_directory
 from telegram import (
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    InputFile,
     InlineQueryResultArticle,
     InputTextMessageContent
 )
@@ -29,7 +26,7 @@ from telegram.ext import (
 
 # التحقق من وجود مكتبة PIL لصناعة البطاقات والصور
 try:
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw
     HAS_PIL = True
 except ImportError:
     HAS_PIL = False
@@ -38,7 +35,7 @@ except ImportError:
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# مجلد التخزين المؤقت للفيديوهات
+# مجلد التخزين المؤقت
 UPLOAD_FOLDER = 'temp_uploads'
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
@@ -73,7 +70,6 @@ USERS_FILE = "users.json"
 REFERRALS_FILE = "referrals.json"
 
 ADMIN_ID = os.getenv("ADMIN_ID")
-REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN")
 WEB_SITE_URL = os.getenv("WEB_SITE_URL", "https://ab-rbx9.onrender.com").rstrip('/')
 
@@ -136,20 +132,20 @@ def save_referral(referrer_id, referred_id):
 # ==========================================
 WELCOME_TEXT = (
     "🇸🇦 **كل عام والوطن بألف خير | اليوم الوطني السعودي 96** 🇸🇦\n\n"
-    "أهلاً بك في بوت سلنقح للتحميل والمسح الذكي المجاني! ⚡\n\n"
+    "أهلاً بك في بوت سلنقح للتحميل والتوضيح المجاني بالكامل! ⚡\n\n"
     "• **لتحميل فيديو من التواصل:** أرسل رابط المقطع مباشرة.\n"
-    "• **لتعديل فيديو بجوالك (4K/AI):** قم بإرسال ملف الفيديو هنا فوراً وسيقوم البوت بمعالجته تلقائياً! 🎬\n\n"
+    "• **لتوضيح ورفع دقة فيديو بجوالك:** أرسل ملف الفيديو هنا فوراً وسيقوم البوت بمعالجته وتوضيحه مجاناً! 🎬\n\n"
     "🛡 حقوق البرمجة والتطوير محفوظة لمطور الخدمة ©"
 )
 
 def get_main_keyboard(user_id):
     ref_count = get_user_ref_count(user_id)
     keyboard = [
-        [InlineKeyboardButton("🚀 زيارة موقع التحميل والمسح الذكي", url=WEB_SITE_URL)],
+        [InlineKeyboardButton("🚀 زيارة موقع الخدمة", url=WEB_SITE_URL)],
         [InlineKeyboardButton("🎨 إنشاء بطاقة تهنئة باليوم الوطني", callback_data="cmd_card")],
         [InlineKeyboardButton(f"🎁 رابط الدعوة الخاص بك ({ref_count} مدعوين)", callback_data="cmd_ref")],
         [InlineKeyboardButton("📜 شروط الاستخدام وإخلاء المسؤولية", callback_data="cmd_terms")],
-        [InlineKeyboardButton("🟢 مشاركة البوت مع الأصدقاء", switch_inline_query="🚀 جرب بوت سلنقح المباشر لتحميل المقاطع وتعديل جودتها بالذكاء الاصطناعي!")]
+        [InlineKeyboardButton("🟢 مشاركة البوت مع الأصدقاء", switch_inline_query="🚀 جرب بوت سلنقح للتحميل وتوضيح المقاطع مجاناً!")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -176,11 +172,7 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
 
     if data == "cmd_main":
-        await query.edit_message_text(
-            WELCOME_TEXT,
-            reply_markup=get_main_keyboard(user_id),
-            parse_mode="Markdown"
-        )
+        await query.edit_message_text(WELCOME_TEXT, reply_markup=get_main_keyboard(user_id), parse_mode="Markdown")
 
     elif data == "cmd_card":
         text = (
@@ -206,7 +198,7 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
     elif data == "cmd_terms":
         text = (
             "📜 **شروط الاستخدام وإخلاء المسؤولية:**\n\n"
-            "1. هذا البوت مخصص للاستخدام الشخصي والمجاني فقط.\n"
+            "1. هذا البوت مخصص للاستخدام الشخصي والمجاني 100%.\n"
             "2. يخلي المطور مسؤوليته الكاملة عن أي استخدام غير قانوني للمحتوى المحمل.\n"
             "3. جميع حقوق البرمجة والتطوير محفوظة لمطور الخدمة ©."
         )
@@ -214,20 +206,16 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
 
 # ==========================================
-# 6. معالجة وتعديل جودة الفيديوهات المرفوعة بالذكاء الاصطناعي
+# 6. التوضيح والمُعالجة المجانية المباشرة (FFmpeg)
 # ==========================================
 async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     save_user(user_id)
 
-    if not REPLICATE_API_TOKEN:
-        await update.message.reply_text(
-            "⚠️ **خدمة التعديل الآلي غير مفعلة:**\n"
-            "يرجى ضبط مفتاح `REPLICATE_API_TOKEN` في متغيرات البيئة بـ Render لتفعيل الذكاء الاصطناعي."
-        )
-        return
+    status_msg = await update.message.reply_text("⏳ **جاري تنزيل الفيديو وتجهيزه للتوضيح...**")
 
-    status_msg = await update.message.reply_text("⏳ **جاري استقبال الفيديو وتجهيزه للمعالجة بالذكاء الاصطناعي...**")
+    input_path = None
+    output_path = None
 
     try:
         video_obj = update.message.video or update.message.document
@@ -238,76 +226,57 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         video_file = await context.bot.get_file(video_obj.file_id)
         
-        file_name = f"user_{user_id}_{int(time.time())}.mp4"
-        local_path = os.path.join(UPLOAD_FOLDER, file_name)
-        await video_file.download_to_drive(local_path)
+        timestamp = int(time.time())
+        input_path = os.path.join(UPLOAD_FOLDER, f"in_{user_id}_{timestamp}.mp4")
+        output_path = os.path.join(UPLOAD_FOLDER, f"out_{user_id}_{timestamp}.mp4")
 
-        public_video_url = f"{WEB_SITE_URL}/uploads/{file_name}"
-        await status_msg.edit_text("✨ **جاري تحسين الفيديو ورفعه لـ 4K وإزالة التغبيش عبر الذكاء الاصطناعي...**\n قد يستغرق ذلك دقيقة.")
+        await video_file.download_to_drive(input_path)
 
-        headers = {
-            "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "input": {
-                "image": public_video_url,
-                "scale": 2,
-                "face_enhance": True
-            }
-        }
+        await status_msg.edit_text("⚡ **جاري مضاعفة دقة الفيديو وإزالة التغبيش وتحسين حدة الألوان مجاناً...**")
 
-        # استخدام نموذج nightmareai/real-esrgan الرسمي المباشر
-        model_url = "https://api.replicate.com/v1/models/nightmareai/real-esrgan/predictions"
-        resp = requests.post(model_url, headers=headers, json=payload, timeout=20)
-        prediction = resp.json()
+        # أمر FFmpeg لمعالجة الفيديو وتوضيحه ورفع الدقة
+        # 1. scale=iw*2:ih*2:flags=lanczos -> مضاعفة دقة الفيديو
+        # 2. unsharp=5:5:1.5:5:5:0.0 -> توضيح الحواف وإزالة التغبيش
+        # 3. eq=contrast=1.1:saturation=1.15 -> تحسين الألوان والتباين
+        ffmpeg_cmd = [
+            "ffmpeg", "-y",
+            "-i", input_path,
+            "-vf", "scale=iw*2:ih*2:flags=lanczos,unsharp=5:5:1.5:5:5:0.0,eq=contrast=1.1:saturation=1.15",
+            "-c:v", "libx264",
+            "-preset", "fast",
+            "-crf", "18",
+            "-c:a", "copy",
+            output_path
+        ]
 
-        if resp.status_code not in [200, 201]:
-            error_detail = prediction.get("detail") or prediction.get("error") or str(prediction)
-            raise Exception(f"Replicate API Error [{resp.status_code}]: {error_detail}")
+        process = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-        prediction_id = prediction["id"]
-        poll_url = f"https://api.replicate.com/v1/predictions/{prediction_id}"
-
-        output_url = None
-        for _ in range(35):
-            time.sleep(5)
-            poll_resp = requests.get(poll_url, headers=headers, timeout=10).json()
-            status = poll_resp.get("status")
-
-            if status == "succeeded":
-                output_url = poll_resp.get("output")
-                break
-            elif status == "failed":
-                err_msg = poll_resp.get("error", "فشلت عملية المعالجة")
-                raise Exception(f"الذكاء الاصطناعي: {err_msg}")
-
-        if output_url:
-            await status_msg.edit_text("✅ **تمت المعالجة بنجاح! جاري إرسال المقطع بكامل الجودة...**")
+        if process.returncode == 0 and os.path.exists(output_path):
+            await status_msg.edit_text("✅ **تمت المعالجة والتوضيح بنجاح! جاري إرسال المقطع...**")
             
-            enhanced_data = requests.get(output_url).content
-            out_bio = BytesIO(enhanced_data)
-            out_bio.name = "enhanced_4k_video.mp4"
-            
-            await update.message.reply_video(
-                video=out_bio,
-                caption="⚡ **تم رفع جودة مقطعك وتوضيحه بنجاح بدقة 4K!**"
-            )
+            with open(output_path, 'rb') as video_out:
+                await update.message.reply_video(
+                    video=video_out,
+                    caption="⚡ **تم رفع دقة الفيديو وتوضيح معالمه بنجاح (مجاناً 100%)!**"
+                )
             await status_msg.delete()
         else:
-            await status_msg.edit_text("❌ استغرقت معالجة الفيديو وقتاً أطول من المتوقع، يرجى المحاولة بمقطع أقصر.")
+            err = process.stderr.decode('utf-8', errors='ignore')
+            logger.error(f"FFmpeg error: {err}")
+            await status_msg.edit_text("❌ متعذر معالجة هذا النوع من صيغ الفيديوهات، يرجى تجربة مقطع آخر.")
 
     except Exception as e:
-        logger.error(f"Error enhancing video: {e}")
+        logger.error(f"Error processing video: {e}")
         await status_msg.edit_text(f"❌ **حدث خطأ أثناء معالجة الفيديو:**\n`{str(e)}`", parse_mode="Markdown")
     
     finally:
-        if 'local_path' in locals() and os.path.exists(local_path):
-            try:
-                os.remove(local_path)
-            except:
-                pass
+        # تنظيف الملفات المؤقتة
+        for p in [input_path, output_path]:
+            if p and os.path.exists(p):
+                try:
+                    os.remove(p)
+                except:
+                    pass
 
 # ==========================================
 # 7. صناعة البطاقات (Card Generation / PIL)
@@ -344,7 +313,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             id="1",
             title="مشاركة بوت اليوم الوطني والتحميل",
             input_message_content=InputTextMessageContent(
-                "🇸🇦 جرب بوت سلنقح المجاني للتحميل ومسح الذكاء الاصطناعي وتعديل المقاطع!"
+                "🇸🇦 جرب بوت سلنقح للتحميل وتوضيح الفيديوهات مجاناً بالكامل!"
             )
         )
     ]
@@ -400,11 +369,11 @@ def main():
     bot_app.add_handler(CallbackQueryHandler(main_callback_handler))
     bot_app.add_handler(InlineQueryHandler(inline_query_handler))
     
-    # معالج الفيديوهات المرفوعة تلقائياً
+    # معالج الفيديوهات المرفوعة
     bot_app.add_handler(MessageHandler(filters.VIDEO | filters.Document.VIDEO, handle_video_upload))
     bot_app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-    print("🤖 البوت يعمل بنجاح ومستعد لاستقبال الأوامر والمقاطع...")
+    print("🤖 البوت يعمل بنجاح ومستعد لاستقبال المقاطع وتوضيحها مجاناً...")
     bot_app.run_polling()
 
 if __name__ == "__main__":
