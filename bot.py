@@ -206,7 +206,7 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
 
 # ==========================================
-# 6. التوضيح والمُعالجة السريعة المجانية (FFmpeg Optimized)
+# 6. التوضيح والمُعالجة السريعة والآمنة (FFmpeg Fixed Dimensions)
 # ==========================================
 async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -232,16 +232,19 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         await video_file.download_to_drive(input_path)
 
-        # أمر FFmpeg محسن لمعالجة سريعة جداً بدون ضغط على السيرفر
+        # فلتر معالجة يضمن أبعاداً زوجية صحيحة دائماً وترميز صوت شامل
+        filter_str = "scale=w='trunc(iw*1.3/2)*2':h='trunc(ih*1.3/2)*2':flags=bicubic,unsharp=3:3:1.0:3:3:0.0,eq=contrast=1.05:saturation=1.1"
+
         ffmpeg_cmd = [
             "ffmpeg", "-y",
             "-i", input_path,
-            "-vf", "scale=iw*1.5:ih*1.5:flags=bicubic,unsharp=3:3:1.2:3:3:0.0,eq=contrast=1.08:saturation=1.1",
+            "-vf", filter_str,
             "-c:v", "libx264",
             "-preset", "ultrafast",
-            "-crf", "22",
+            "-crf", "23",
             "-threads", "0",
-            "-c:a", "copy",
+            "-c:a", "aac",
+            "-b:a", "128k",
             output_path
         ]
 
@@ -257,9 +260,9 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
                 )
             await status_msg.delete()
         else:
-            err = process.stderr.decode('utf-8', errors='ignore')
-            logger.error(f"FFmpeg error: {err}")
-            await status_msg.edit_text("❌ متعذر معالجة هذا الفيديو، يرجى تجربة مقطع آخر.")
+            err_output = process.stderr.decode('utf-8', errors='ignore')
+            logger.error(f"FFmpeg error details: {err_output}")
+            await status_msg.edit_text("❌ متعذر معالجة هذا الفيديو، تأكد من إرسال مقطع فيديو صالح.")
 
     except Exception as e:
         logger.error(f"Error processing video: {e}")
