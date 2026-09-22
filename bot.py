@@ -180,14 +180,14 @@ def download_media(url, format_type="video_best", remove_text=False):
             
         return filename
 
-# --- واجهة الويب الاحتفالية (HTML / CSS) ---
+# --- واجهة الويب المحميّة والاحتفالية (HTML / CSS) ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🇸🇦 اليوم الوطني السعودي 96 | التحميل والمسح الذكي (مجاني 100%) ⚡️</title>
+    <title>🇸🇦 اليوم الوطني السعودي 96 | التحميل والمسح الذكي ⚡️</title>
     <style>
         :root {
             --saudi-green: #006c35;
@@ -274,13 +274,36 @@ HTML_TEMPLATE = """
 
         #cardCanvas { display: none; margin: 15px auto; max-width: 100%; border-radius: 12px; border: 2px solid var(--saudi-gold); }
         #status { margin-top: 15px; font-size: 13px; color: #a0b0a5; }
+
+        /* حقوق الملكية وإخلاء المسؤولية */
+        .footer-rights {
+            margin-top: 25px;
+            width: 100%;
+            max-width: 460px;
+            text-align: center;
+            font-size: 12px;
+            color: #7b9384;
+            border-top: 1px solid #183323;
+            padding-top: 15px;
+        }
+        .footer-rights b { color: var(--saudi-gold); }
+        .disclaimer {
+            background: #08120b;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 11px;
+            line-height: 1.5;
+            color: #8fa397;
+            text-align: justify;
+        }
     </style>
 </head>
 <body>
 
 <div class="banner">
     <h3>🇸🇦 اليوم الوطني السعودي 96 | عزّنا بطبعنا 🇸🇦</h3>
-    <p>⚡️ موقع وبوت مجاني بالكامل 100% للجميع!</p>
+    <p>⚡️ أداة تحصيل الميديا والمسح الذكي المجانية 100%</p>
 </div>
 
 <div class="tab-buttons">
@@ -320,6 +343,15 @@ HTML_TEMPLATE = """
     
     <canvas id="cardCanvas" width="800" height="800"></canvas>
     <a id="downloadCardBtn" style="display:none;" class="btn-green" download="Saudi_96_Card.png">📥 تحميل البطاقة مجاناً</a>
+</div>
+
+<!-- قسم الحقوق وإخلاء المسؤولية -->
+<div class="footer-rights">
+    <p>جميع الحقوق محفوظة وتعود لمطور الخدمة الأصلي © 2026 🇸🇦</p>
+    <div class="disclaimer">
+        ⚠️ <b>إخلاء مسؤولية وشروط الاستخدام:</b><br>
+        هذا الموقع والبوت أداة تقنية مخصصة للاستخدام الشخصي والتعديل على المحتوى الخاص بك. لا يتم تخزين أو استضافة أي ملفات فيديو أو صوت على خوادمنا نهائياً (تُحذف تلقائياً فوراً). المستخدم يتحمل كامل المسؤولية القانونية والأخلاقية عن طريقة استخدامه للمحتوى ونشره.
+    </div>
 </div>
 
 <script>
@@ -454,17 +486,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_user(update.effective_user.id)
     
     keyboard = [
-        [InlineKeyboardButton("🚀 زيارة موقع التحميل والمسح الذكي (مجاناً)", url="https://ab-rbx9.onrender.com")],
+        [InlineKeyboardButton("🚀 زيارة موقع التحميل والمسح الذكي", url="https://ab-rbx9.onrender.com")],
         [InlineKeyboardButton("🎨 إنشاء بطاقة تهنئة باليوم الوطني", callback_data="make_card")],
+        [InlineKeyboardButton("📜 شروط الاستخدام وإخلاء المسؤولية", callback_data="terms")],
         [InlineKeyboardButton("🟢 مشاركة البوت مع الأصدقاء", callback_data="share_bot")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     welcome_text = (
         "🇸🇦 **كل عام والوطن بألف خير | اليوم الوطني السعودي 96** 🇸🇦\n\n"
-        "أهلاً بك في بوت وموقع التحميل والمسح الذكي المجاني بالكامل! ⚡️\n\n"
+        "أهلاً بك في بوت وموقع التحميل والمسح الذكي المجاني! ⚡️\n\n"
         "• أرسل رابط الفيديو للتحميل المباشر خالي من الحقوق.\n"
-        "• أو استخدم الموقع لمسح الكتابة والنصوص بالذكاء الاصطناعي مجاناً وبدون أي حد! 💚"
+        "• أو استخدم الموقع لمسح الكتابة والنصوص بالذكاء الاصطناعي مجاناً! 💚\n\n"
+        "🛡 _حقوق البرمجة والتطوير محفوظة لمطور الخدمة ©_"
     )
     await update.message.reply_text(welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
 
@@ -474,8 +508,17 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if query.data == "make_card":
         await query.message.reply_text("لإنشاء بطاقة تهنئة باسمك مجاناً، اكتب الأمر كالتالي:\n\n`/card اسمك`\nمثال: `/card مناع`", parse_mode="Markdown")
+    elif query.data == "terms":
+        terms_text = (
+            "⚖️ **شروط الاستخدام وإخلاء المسؤولية القانونية:**\n\n"
+            "1. هذا البوت والموقع أداة تقنية مخصصة للاستخدام الشخصي المشروع والتعديل على المحتوى الخاص بك.\n"
+            "2. لا يتم استضافة أو حفظ أي فيديوهات/صوتيات على خوادمنا إطلاقاً، وتُحذف تلقائياً فور إرسالها.\n"
+            "3. المستخدم يتحمل المسؤولية القانونية الكاملة عن أي استخدام غير مشروع أو انتهاك لحقوق الملكية الفكرية.\n"
+            "4. جميع حقوق برمجة وتطوير البوت والموقع محفوظة لمطور الخدمة الأصلي ©."
+        )
+        await query.message.reply_text(terms_text, parse_mode="Markdown")
     elif query.data == "share_bot":
-        share_url = f"https://t.me/share/url?url=https://t.me/{context.bot.username}&text=جرّب%20بوت%20التحميل%20ومسح%20النصوص%20بالذكاء%20الاصطناعي%20المجاني%20بالكامل%20بمناسبة%20اليوم%20الوطني%2096%20🇸🇦"
+        share_url = f"https://t.me/share/url?url=https://t.me/{context.bot.username}&text=جرّب%20بوت%20التحميل%20ومسح%20النصوص%20بالذكاء%20الاصطناعي%20المجاني%20بمناسبة%20اليوم%20الوطني%2096%20🇸🇦"
         kb = [[InlineKeyboardButton("📲 إرسال إلى الواتساب / تليجرام", url=share_url)]]
         await query.message.reply_text("انشر البوت لأصدقائك مجاناً واحتفلوا باليوم الوطني! 💚", reply_markup=InlineKeyboardMarkup(kb))
 
@@ -486,7 +529,7 @@ async def card_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = await update.message.reply_text("⏳ جاري تصميم بطاقتك...")
         try:
             card_img = generate_national_card(name)
-            await update.message.reply_photo(photo=card_img, caption=f"🇸🇦 بطاقة تهنئة باليوم الوطني 96 إهداء لـ **{name}** ✨", parse_mode="Markdown")
+            await update.message.reply_photo(photo=card_img, caption=f"🇸🇦 بطاقة تهنئة باليوم الوطني 96 إهداء لـ **{name}** ✨\n\n_حقوق التطوير محفوظة لمطور الخدمة ©_", parse_mode="Markdown")
             await msg.delete()
         except Exception as e:
             await msg.edit_text(f"🇸🇦 **اليوم الوطني السعودي 96 | عزّنا بطبعنا**\n\nنهنئكم بمناسبة اليوم الوطني المجيد!\nإهداء خاص إلى: **{name}** 💚")
@@ -504,7 +547,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         file_path = download_media(url, format_type="video_best")
         with open(file_path, 'rb') as video:
-            await update.message.reply_video(video=video, caption="تم التحميل بنجاح ⚡️\n🇸🇦 دام عزك يا وطن 🇸🇦")
+            await update.message.reply_video(video=video, caption="تم التحميل بنجاح ⚡️\n🇸🇦 دام عزك يا وطن 🇸🇦\n\n_حقوق البوت والموقع محفوظة للمطور ©_")
         await msg.delete()
         os.remove(file_path)
     except Exception as e:
