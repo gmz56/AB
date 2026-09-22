@@ -123,39 +123,7 @@ def save_referral(referrer_id, referred_id):
             json.dump(refs, f)
 
 # ==========================================
-# 4. قاعدة بيانات الخلفيات الـ 20 المباشرة
-# ==========================================
-WALLPAPERS_DB = {
-    "movies": [
-        {"id": 1, "title": "Ragnar Lothbrok - Vikings", "url": "https://picsum.photos/id/1015/1200/800"},
-        {"id": 2, "title": "Dexter - Tonight's The Night", "url": "https://picsum.photos/id/1018/1200/800"},
-        {"id": 3, "title": "The Mentalist - Patrick Jane", "url": "https://picsum.photos/id/1025/1200/800"},
-        {"id": 4, "title": "Walter White - Breaking Bad", "url": "https://picsum.photos/id/1069/1200/800"},
-        {"id": 5, "title": "Thomas Shelby - Peaky Blinders", "url": "https://picsum.photos/id/1062/1200/800"},
-        {"id": 6, "title": "Eleven - Stranger Things (The Void)", "url": "https://picsum.photos/id/1043/1200/800"},
-        {"id": 7, "title": "Eminem - The King", "url": "https://picsum.photos/id/1031/1200/800"},
-        {"id": 8, "title": "Billie Eilish - Dark Spider", "url": "https://picsum.photos/id/1035/1200/800"}
-    ],
-    "anime": [
-        {"id": 9, "title": "العين الحمراء المتوهجة", "url": "https://picsum.photos/id/1067/1200/800"},
-        {"id": 10, "title": "وجه المانغا بالأبيض والأسود", "url": "https://picsum.photos/id/1074/1200/800"},
-        {"id": 11, "title": "فتاة الشعر الأبيض والزهرة", "url": "https://picsum.photos/id/1080/1200/800"},
-        {"id": 12, "title": "فتاة الشعر الأبيض والعيون الحادة", "url": "https://picsum.photos/id/1084/1200/800"},
-        {"id": 13, "title": "العيون الكريستالية الزرقاء", "url": "https://picsum.photos/id/1027/1200/800"},
-        {"id": 14, "title": "العيون الخضراء المضيئة", "url": "https://picsum.photos/id/1050/1200/800"},
-        {"id": 15, "title": "فان التخييم تحت سماء الليل والقمر", "url": "https://picsum.photos/id/1059/1200/800"}
-    ],
-    "dark": [
-        {"id": 16, "title": "الشخصية الغامضة خلف السلاسل", "url": "https://picsum.photos/id/1040/1200/800"},
-        {"id": 17, "title": "التأمل وسط البحر والضباب", "url": "https://picsum.photos/id/1053/1200/800"},
-        {"id": 18, "title": "المجسم الكرومي اللامع", "url": "https://picsum.photos/id/1060/1200/800"},
-        {"id": 19, "title": "التاج الأسود والغموض", "url": "https://picsum.photos/id/1011/1200/800"},
-        {"id": 20, "title": "فتاة الهودي والعيون الحمراء", "url": "https://picsum.photos/id/1068/1200/800"}
-    ]
-}
-
-# ==========================================
-# 5. بناء لوحة القائمة الرئيسية والترحيب
+# 4. بناء لوحة القائمة الرئيسية والترحيب
 # ==========================================
 WELCOME_TEXT = (
     "🇸🇦 **كل عام والوطن بألف خير | اليوم الوطني السعودي 96** 🇸🇦\n\n"
@@ -169,56 +137,16 @@ def get_main_keyboard(user_id):
     ref_count = get_user_ref_count(user_id)
     keyboard = [
         [InlineKeyboardButton("🚀 زيارة موقع التحميل والمسح الذكي", url=WEB_SITE_URL)],
+        [InlineKeyboardButton("⚡ رفع جودة الفيديو وسلاسته (4K/60fps)", callback_data="cmd_enhance")],
         [InlineKeyboardButton("🎨 إنشاء بطاقة تهنئة باليوم الوطني", callback_data="cmd_card")],
-        [InlineKeyboardButton("🖼 قسم خلفيات 4K عالية الدقة (20)", callback_data="wp_main")],
         [InlineKeyboardButton(f"🎁 رابط الدعوة الخاص بك ({ref_count} مدعوين)", callback_data="cmd_ref")],
         [InlineKeyboardButton("📜 شروط الاستخدام وإخلاء المسؤولية", callback_data="cmd_terms")],
-        [InlineKeyboardButton("🟢 مشاركة البوت مع الأصدقاء", switch_inline_query="🚀 جرب بوت سلنقح المباشر لتحميل المقاطع واستعراض خلفيات الـ 4K!")]
+        [InlineKeyboardButton("🟢 مشاركة البوت مع الأصدقاء", switch_inline_query="🚀 جرب بوت سلنقح المباشر لتحميل المقاطع وتعديل جودتها بالذكاء الاصطناعي!")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
 # ==========================================
-# 6. دالة معالجة وإرسال الصورة المباشرة
-# ==========================================
-async def send_wallpaper_item(query, item):
-    title = item["title"]
-    file_path = item.get("file")
-    url = item.get("url")
-
-    # 1. إذا كان الملف موجوداً محلياً
-    if file_path and os.path.exists(file_path):
-        try:
-            with open(file_path, "rb") as photo_file:
-                await query.message.reply_photo(
-                    photo=photo_file,
-                    caption=f"🖼 **{title}**\n\n✨ بدقة عالية 4K",
-                    parse_mode="Markdown"
-                )
-                return
-        except Exception as e:
-            logger.error(f"Error sending local file: {e}")
-
-    # 2. إرسال الصورة مباشرة عبر البث المباشر
-    if url:
-        try:
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-            response = requests.get(url, headers=headers, timeout=12)
-            if response.status_code == 200:
-                bio = BytesIO(response.content)
-                bio.name = "wallpaper.jpg"
-                await query.message.reply_photo(
-                    photo=bio,
-                    caption=f"🖼 **{title}**\n\n✨ بدقة عالية 4K",
-                    parse_mode="Markdown"
-                )
-                return
-        except Exception as e:
-            logger.error(f"Error downloading photo url: {e}")
-
-    await query.message.reply_text(f"🖼 **{title}**\n\n✨ بدقة عالية 4K")
-
-# ==========================================
-# 7. دوال الأوامر والتحكم الرئيسي
+# 5. دوال الأوامر والتحكم الرئيسي
 # ==========================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -245,6 +173,20 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
             reply_markup=get_main_keyboard(user_id),
             parse_mode="Markdown"
         )
+
+    elif data == "cmd_enhance":
+        text = (
+            "⚡ **طريقة رفع جودة مقاطعك إلى 4K وزيادة سلاستها (60fps):**\n\n"
+            "للحصول على دقة خرافية وإزالة التغبيش من مقاطعك المحفوظة بالجوال مجاناً وبضغطة زر:\n\n"
+            "1️⃣ **تطبيق Wink (الأفضل والأسرع بالذكاء الاصطناعي):**\n"
+            "• افتح التطبيق واختر ميزة **Image Quality / AI Repair**.\n"
+            "• سيقوم معالج الجوال بالذكاء الاصطناعي برفع الدقة إلى 4K وإزالة أي تغبيش فوراً.\n\n"
+            "2️⃣ **تطبيق CapCut (لزيادة السلاسة 60fps):**\n"
+            "• اختر المقطع > **Enhance / الجودة** واضبط الدقة على 4K ومعدل الإطارات (Frame Rate) على 60fps عند التصدير.\n\n"
+            "💡 *هذه الطرق تضمن لك أعلى جودة وسلاسة فائقة دون الانتظار أو استهلاك باقة البيانات!*"
+        )
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة لقائمة الخدمات", callback_data="cmd_main")]])
+        await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
 
     elif data == "cmd_card":
         text = (
@@ -277,35 +219,8 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="cmd_main")]])
         await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
 
-    elif data == "wp_main":
-        keyboard = [
-            [InlineKeyboardButton("🎬 شخصيات ومسلسلات (8)", callback_data="wp_cat_movies")],
-            [InlineKeyboardButton("🎨 أنمي وفن رقمي (7)", callback_data="wp_cat_anime")],
-            [InlineKeyboardButton("🌌 أنماط داكنة وغموض (5)", callback_data="wp_cat_dark")],
-            [InlineKeyboardButton("🔙 العودة لقائمة الخدمات", callback_data="cmd_main")]
-        ]
-        text = "🎨 **قسم الخلفيات عالية الدقة (4K):**\n\nاختر التصنيف المفضل لديك:"
-        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
-
-    elif data.startswith("wp_cat_"):
-        category = data.split("_")[2]
-        items = WALLPAPERS_DB.get(category, [])
-        keyboard = []
-        for item in items:
-            keyboard.append([InlineKeyboardButton(item["title"], callback_data=f"wp_img_{category}_{item['id']}")])
-        keyboard.append([InlineKeyboardButton("🔙 العودة لقائمة الخلفيات", callback_data="wp_main")])
-        
-        await query.edit_message_text("🖼 **اختر الخلفية التي تريدها:**", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
-
-    elif data.startswith("wp_img_"):
-        _, _, category, img_id = data.split("_")
-        img_id = int(img_id)
-        item = next((x for x in WALLPAPERS_DB.get(category, []) if x["id"] == img_id), None)
-        if item:
-            await send_wallpaper_item(query, item)
-
 # ==========================================
-# 8. صناعة البطاقات (Card Generation / PIL)
+# 6. صناعة البطاقات (Card Generation / PIL)
 # ==========================================
 def create_card_image(text_content):
     if not HAS_PIL:
@@ -331,7 +246,7 @@ async def card_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.edit_text(f"🖼 **بطاقتك:**\n{user_text}")
 
 # ==========================================
-# 9. الاستعلام الفوري Inline Query Handler
+# 7. الاستعلام الفوري Inline Query Handler
 # ==========================================
 async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     results = [
@@ -339,14 +254,14 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             id="1",
             title="مشاركة بوت اليوم الوطني والتحميل",
             input_message_content=InputTextMessageContent(
-                "🇸🇦 جرب بوت سلنقح المجاني للتحميل ومسح الذكاء الاصطناعي وخلفيات 4K!"
+                "🇸🇦 جرب بوت سلنقح المجاني للتحميل ومسح الذكاء الاصطناعي!"
             )
         )
     ]
     await update.inline_query.answer(results)
 
 # ==========================================
-# 10. معالجة الرسائل والروابط (yt_dlp)
+# 8. معالجة الرسائل والروابط (yt_dlp)
 # ==========================================
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text or ""
@@ -380,7 +295,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await start(update, context)
 
 # ==========================================
-# 11. دالة التشغيل الرئيسية Main
+# 9. دالة التشغيل الرئيسية Main
 # ==========================================
 def main():
     keep_alive()
@@ -392,7 +307,6 @@ def main():
 
     bot_app.add_handler(CommandHandler("start", start))
     bot_app.add_handler(CommandHandler("card", card_command))
-    bot_app.add_handler(CommandHandler("wallpapers", start))
     bot_app.add_handler(CallbackQueryHandler(main_callback_handler))
     bot_app.add_handler(InlineQueryHandler(inline_query_handler))
     bot_app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
