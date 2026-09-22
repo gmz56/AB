@@ -187,7 +187,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🇸🇦 اليوم الوطني السعودي 96 | التحميل والمسح الذكي ⚡️</title>
+    <title>🇸🇦 اليوم الوطني السعودي 96 | التحميل والمسح الذكي (مجاني 100%) ⚡️</title>
     <style>
         :root {
             --saudi-green: #006c35;
@@ -218,7 +218,6 @@ HTML_TEMPLATE = """
             margin-bottom: 20px;
             width: 100%;
             max-width: 460px;
-            box-shadow: 0 4px 20px rgba(212, 175, 55, 0.2);
         }
         .banner h3 { margin: 0; color: var(--saudi-gold); font-size: 16px; }
         .banner p { margin: 4px 0 0 0; font-size: 13px; color: #fff; }
@@ -230,8 +229,8 @@ HTML_TEMPLATE = """
             text-align: center; 
             width: 100%; 
             max-width: 460px; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.7); 
-            border: 1px solid rgba(212, 175, 55, 0.3); 
+            box-shadow: 0 10px 30px #000; 
+            border: 1px solid #d4af37; 
         }
         h2 { margin-bottom: 15px; color: var(--saudi-gold); font-size: 22px; }
         
@@ -261,7 +260,6 @@ HTML_TEMPLATE = """
             font-size: 16px; 
             cursor: pointer; 
             transition: 0.2s; 
-            box-shadow: 0 4px 15px rgba(0, 108, 53, 0.4);
         }
         .btn-green:hover { filter: brightness(1.1); }
         .btn-gold {
@@ -282,7 +280,7 @@ HTML_TEMPLATE = """
 
 <div class="banner">
     <h3>🇸🇦 اليوم الوطني السعودي 96 | عزّنا بطبعنا 🇸🇦</h3>
-    <p>🎁 هديتنا لكم: ميزة مسح النصوص بالذكاء الاصطناعي مجانية اليوم!</p>
+    <p>⚡️ موقع وبوت مجاني بالكامل 100% للجميع!</p>
 </div>
 
 <div class="tab-buttons">
@@ -292,7 +290,7 @@ HTML_TEMPLATE = """
 
 <!-- قسم التحميل والذكاء الاصطناعي -->
 <div class="card" id="tab-downloader">
-    <h2>⚡️ محصّد الميديا والمسح الذكي</h2>
+    <h2>⚡️ تحميل الميديا والمسح الذكي</h2>
     <input type="url" id="url" placeholder="ضع رابط الفيديو هنا...">
     
     <div class="options">
@@ -310,18 +308,18 @@ HTML_TEMPLATE = """
         </label>
     </div>
 
-    <button class="btn-green" onclick="dl()">بدء التحميل ⚡️</button>
+    <button class="btn-green" onclick="dl()">بدء التحميل مجاناً ⚡️</button>
     <div id="status"></div>
 </div>
 
 <!-- قسم صانع بطاقات اليوم الوطني -->
 <div class="card" id="tab-cardGen" style="display: none;">
-    <h2>🎨 بطاقة تهنئة بالليوم الوطني 96</h2>
-    <input type="text" id="cardName" placeholder="اكتب اسمك هنا (مثال: مناع العسيري)">
+    <h2>🎨 بطاقة تهنئة باليوم الوطني 96</h2>
+    <input type="text" id="cardName" placeholder="اكتب اسمك هنا">
     <button class="btn-green btn-gold" onclick="createCard()">إنشاء البطاقة الفخمة ✨</button>
     
     <canvas id="cardCanvas" width="800" height="800"></canvas>
-    <a id="downloadCardBtn" style="display:none;" class="btn-green" download="Saudi_96_Card.png">📥 تحميل البطاقة</a>
+    <a id="downloadCardBtn" style="display:none;" class="btn-green" download="Saudi_96_Card.png">📥 تحميل البطاقة مجاناً</a>
 </div>
 
 <script>
@@ -350,7 +348,7 @@ function dl(){
     if(selectedOption === 'video_ai') {
         formatType = 'video_best';
         removeText = true;
-        statusDiv.innerText = "🤖 جاري معالجة الفيديو بالذكاء الاصطناعي ومسح النصوص (قد يستغرق لحظات)...";
+        statusDiv.innerText = "🤖 جاري معالجة الفيديو بالذكاء الاصطناعي ومسح النصوص...";
     } else if(selectedOption === 'audio_only') {
         formatType = 'audio_only';
         statusDiv.innerText = "⏳ جاري استخراج الصوت...";
@@ -384,11 +382,9 @@ function createCard() {
     const canvas = document.getElementById('cardCanvas');
     const ctx = canvas.getContext('2d');
 
-    // خلفية خضراء داكنة
     ctx.fillStyle = "#005228";
     ctx.fillRect(0, 0, 800, 800);
 
-    // إطار ذهبي
     ctx.strokeStyle = "#d4af37";
     ctx.lineWidth = 12;
     ctx.strokeRect(30, 30, 740, 740);
@@ -397,7 +393,6 @@ function createCard() {
     ctx.lineWidth = 2;
     ctx.strokeRect(45, 45, 710, 710);
 
-    // نصوص البطاقة
     ctx.fillStyle = "#d4af37";
     ctx.font = "bold 40px 'Segoe UI', Tahoma";
     ctx.textAlign = "center";
@@ -454,12 +449,12 @@ def run_flask_site():
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, use_reloader=False)
 
-# --- أوامر بوت تليجرام المحدثة باليوم الوطني ---
+# --- أوامر بوت تليجرام ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_user(update.effective_user.id)
     
     keyboard = [
-        [InlineKeyboardButton("🚀 زيارة موقع التحميل والمسح الذكي", url="https://ab-rbx9.onrender.com")],
+        [InlineKeyboardButton("🚀 زيارة موقع التحميل والمسح الذكي (مجاناً)", url="https://ab-rbx9.onrender.com")],
         [InlineKeyboardButton("🎨 إنشاء بطاقة تهنئة باليوم الوطني", callback_data="make_card")],
         [InlineKeyboardButton("🟢 مشاركة البوت مع الأصدقاء", callback_data="share_bot")]
     ]
@@ -467,9 +462,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     welcome_text = (
         "🇸🇦 **كل عام والوطن بألف خير | اليوم الوطني السعودي 96** 🇸🇦\n\n"
-        "أهلاً بك في بوت التحميل والمسح الذكي! ⚡️\n"
+        "أهلاً بك في بوت وموقع التحميل والمسح الذكي المجاني بالكامل! ⚡️\n\n"
         "• أرسل رابط الفيديو للتحميل المباشر خالي من الحقوق.\n"
-        "• أو استخدم الموقع لمسح الكتابة والنصوص بالذكاء الاصطناعي مجاناً! 💚"
+        "• أو استخدم الموقع لمسح الكتابة والنصوص بالذكاء الاصطناعي مجاناً وبدون أي حد! 💚"
     )
     await update.message.reply_text(welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
 
@@ -478,20 +473,20 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     if query.data == "make_card":
-        await query.message.reply_text("لإنشاء بطاقة تهنئة باسمك، اكتب الأمر كالتالي:\n\n`/card اسمك`\nمثال: `/card مناع`", parse_mode="Markdown")
+        await query.message.reply_text("لإنشاء بطاقة تهنئة باسمك مجاناً، اكتب الأمر كالتالي:\n\n`/card اسمك`\nمثال: `/card مناع`", parse_mode="Markdown")
     elif query.data == "share_bot":
-        share_url = f"https://t.me/share/url?url=https://t.me/{context.bot.username}&text=جرّب%20بوت%20التحميل%20ومسح%20النصوص%20بالذكاء%20الاصطناعي%20بمناسبة%20اليوم%20الوطني%2096%20🇸🇦"
+        share_url = f"https://t.me/share/url?url=https://t.me/{context.bot.username}&text=جرّب%20بوت%20التحميل%20ومسح%20النصوص%20بالذكاء%20الاصطناعي%20المجاني%20بالكامل%20بمناسبة%20اليوم%20الوطني%2096%20🇸🇦"
         kb = [[InlineKeyboardButton("📲 إرسال إلى الواتساب / تليجرام", url=share_url)]]
-        await query.message.reply_text("انشر البوت لأصدقائك واحتفلوا باليوم الوطني! 💚", reply_markup=InlineKeyboardMarkup(kb))
+        await query.message.reply_text("انشر البوت لأصدقائك مجاناً واحتفلوا باليوم الوطني! 💚", reply_markup=InlineKeyboardMarkup(kb))
 
 async def card_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = " ".join(context.args) if context.args else update.effective_user.first_name
     
     if HAS_PIL:
-        msg = await update.message.reply_text("⏳ جاري تصميم بطاقتك الفخمة...")
+        msg = await update.message.reply_text("⏳ جاري تصميم بطاقتك...")
         try:
             card_img = generate_national_card(name)
-            await update.message.reply_photo(photo=card_img, caption=f"🇸🇦 بطاقة تهنئة بالليوم الوطني 96 إهداء لـ **{name}** ✨", parse_mode="Markdown")
+            await update.message.reply_photo(photo=card_img, caption=f"🇸🇦 بطاقة تهنئة باليوم الوطني 96 إهداء لـ **{name}** ✨", parse_mode="Markdown")
             await msg.delete()
         except Exception as e:
             await msg.edit_text(f"🇸🇦 **اليوم الوطني السعودي 96 | عزّنا بطبعنا**\n\nنهنئكم بمناسبة اليوم الوطني المجيد!\nإهداء خاص إلى: **{name}** 💚")
