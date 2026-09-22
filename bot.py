@@ -123,29 +123,34 @@ def save_referral(referrer_id, referred_id):
             json.dump(refs, f)
 
 # ==========================================
-# 4. قاعدة بيانات الخلفيات الـ 15 (روابط صور حقيقية ومباشرة)
+# 4. قاعدة بيانات الخلفيات الـ 20 الكاملة
 # ==========================================
 WALLPAPERS_DB = {
     "movies": [
-        {"id": 1, "title": "Ragnar Lothbrok - Vikings", "url": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=1200"},
-        {"id": 2, "title": "Dexter - Tonight's The Night", "url": "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=1200"},
-        {"id": 3, "title": "The Mentalist - Patrick Jane", "url": "https://images.unsplash.com/photo-1485846234645-a62644f84728?q=80&w=1200"}
+        {"id": 1, "title": "Ragnar Lothbrok - Vikings", "file": "images/1.jpg"},
+        {"id": 2, "title": "Dexter - Tonight's The Night", "file": "images/2.jpg"},
+        {"id": 3, "title": "The Mentalist - Patrick Jane", "file": "images/3.jpg"},
+        {"id": 4, "title": "Walter White - Breaking Bad", "file": "images/4.jpg"},
+        {"id": 5, "title": "Thomas Shelby - Peaky Blinders", "file": "images/5.jpg"},
+        {"id": 6, "title": "Eleven - Stranger Things (The Void)", "file": "images/6.jpg"},
+        {"id": 7, "title": "Eminem - The King", "file": "images/7.jpg"},
+        {"id": 8, "title": "Billie Eilish - Dark Spider", "file": "images/8.jpg"}
     ],
     "anime": [
-        {"id": 4, "title": "العين الحمراء المتوهجة", "url": "https://images.unsplash.com/photo-1578632767115-351597cf2477?q=80&w=1200"},
-        {"id": 5, "title": "شاب على السيارة تحت سماء الليل", "url": "https://images.unsplash.com/photo-1503376780353-7e6692767b70?q=80&w=1200"},
-        {"id": 6, "title": "فتاة حقل اليراعات عند الغروب", "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1200"},
-        {"id": 7, "title": "فتاة النافذة والمطر", "url": "https://images.unsplash.com/photo-1519692933481-e162a57d6721?q=80&w=1200"},
-        {"id": 8, "title": "وجه المانغا بالأبيض والأسود", "url": "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?q=80&w=1200"},
-        {"id": 9, "title": "فان التخييم تحت سماء الليل والقمر", "url": "https://images.unsplash.com/photo-1526772662000-3f88f10405ff?q=80&w=1200"},
-        {"id": 10, "title": "فتاة الشعر الأبيض والزهرة", "url": "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=1200"}
+        {"id": 9, "title": "العين الحمراء المتوهجة", "file": "images/9.jpg"},
+        {"id": 10, "title": "وجه المانغا بالأبيض والأسود", "file": "images/10.jpg"},
+        {"id": 11, "title": "فتاة الشعر الأبيض والزهرة", "file": "images/11.jpg"},
+        {"id": 12, "title": "فتاة الشعر الأبيض والعيون الحادة", "file": "images/12.jpg"},
+        {"id": 13, "title": "العيون الكريستالية الزرقاء", "file": "images/13.jpg"},
+        {"id": 14, "title": "العيون الخضراء المضيئة", "file": "images/14.jpg"},
+        {"id": 15, "title": "فان التخييم تحت سماء الليل والقمر", "file": "images/15.jpg"}
     ],
     "dark": [
-        {"id": 11, "title": "الكسوف والكوكب فوق الجبال", "url": "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?q=80&w=1200"},
-        {"id": 12, "title": "الشخصية الغامضة والتاج الأسود", "url": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=1200"},
-        {"id": 13, "title": "التأمل وسط البحر والضباب", "url": "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?q=80&w=1200"},
-        {"id": 14, "title": "المجسم الكرومي اللامع", "url": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1200"},
-        {"id": 15, "title": "الشخصية الغامضة خلف السلاسل", "url": "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=1200"}
+        {"id": 16, "title": "الشخصية الغامضة خلف السلاسل", "file": "images/16.jpg"},
+        {"id": 17, "title": "التأمل وسط البحر والضباب", "file": "images/17.jpg"},
+        {"id": 18, "title": "المجسم الكرومي اللامع", "file": "images/18.jpg"},
+        {"id": 19, "title": "التاج الأسود والغموض", "file": "images/19.jpg"},
+        {"id": 20, "title": "فتاة الهودي والعيون الحمراء", "file": "images/20.jpg"}
     ]
 }
 
@@ -165,7 +170,7 @@ def get_main_keyboard(user_id):
     keyboard = [
         [InlineKeyboardButton("🚀 زيارة موقع التحميل والمسح الذكي", url=WEB_SITE_URL)],
         [InlineKeyboardButton("🎨 إنشاء بطاقة تهنئة باليوم الوطني", callback_data="cmd_card")],
-        [InlineKeyboardButton("🖼 قسم خلفيات 4K عالية الدقة", callback_data="wp_main")],
+        [InlineKeyboardButton("🖼 قسم خلفيات 4K عالية الدقة (20)", callback_data="wp_main")],
         [InlineKeyboardButton(f"🎁 رابط الدعوة الخاص بك ({ref_count} مدعوين)", callback_data="cmd_ref")],
         [InlineKeyboardButton("📜 شروط الاستخدام وإخلاء المسؤولية", callback_data="cmd_terms")],
         [InlineKeyboardButton("🟢 مشاركة البوت مع الأصدقاء", switch_inline_query="🚀 جرب بوت سلنقح المباشر لتحميل المقاطع واستعراض خلفيات الـ 4K!")]
@@ -234,9 +239,9 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
     elif data == "wp_main":
         keyboard = [
-            [InlineKeyboardButton("🎬 مسلسلات وسينما (3)", callback_data="wp_cat_movies")],
+            [InlineKeyboardButton("🎬 شخصيات ومسلسلات (8)", callback_data="wp_cat_movies")],
             [InlineKeyboardButton("🎨 أنمي وفن رقمي (7)", callback_data="wp_cat_anime")],
-            [InlineKeyboardButton("🌌 أنماط داكنة وفضاء (5)", callback_data="wp_cat_dark")],
+            [InlineKeyboardButton("🌌 أنماط داكنة وغموض (5)", callback_data="wp_cat_dark")],
             [InlineKeyboardButton("🔙 العودة لقائمة الخدمات", callback_data="cmd_main")]
         ]
         text = "🎨 **قسم الخلفيات عالية الدقة (4K):**\n\nاختر التصنيف المفضل لديك:"
@@ -257,15 +262,22 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
         img_id = int(img_id)
         item = next((x for x in WALLPAPERS_DB[category] if x["id"] == img_id), None)
         if item:
-            try:
+            file_path = item.get("file") or f"images/{img_id}.jpg"
+            if os.path.exists(file_path):
+                with open(file_path, "rb") as photo_file:
+                    await query.message.reply_photo(
+                        photo=photo_file,
+                        caption=f"🖼 **{item['title']}**\n\n✨ بدقة عالية 4K",
+                        parse_mode="Markdown"
+                    )
+            elif item.get("url"):
                 await query.message.reply_photo(
                     photo=item["url"],
                     caption=f"🖼 **{item['title']}**\n\n✨ بدقة عالية 4K",
                     parse_mode="Markdown"
                 )
-            except Exception as e:
-                logger.error(f"Error sending wallpaper: {e}")
-                await query.message.reply_text("❌ تعذر تحميل هذه الصورة حالياً، جرب خلفية أخرى.")
+            else:
+                await query.message.reply_text(f"⚠️ جارٍ تجهيز صورة ({item['title']})، يرجى التأكد من وضع الملف باسم {img_id}.jpg داخل مجلد images في GitHub.")
 
 # ==========================================
 # 7. صناعة البطاقات (Card Generation / PIL)
