@@ -31,8 +31,8 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# ضع التوكن الخاص بك هنا
-BOT_TOKEN = os.getenv("BOT_TOKEN", "ضع_التوكين_الخاص_بك_هنا")
+# يقرأ التوكن سواء كان مسمى BOT_TOKEN أو TELEGRAM_BOT_TOKEN في Render
+BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN") or "ضع_التوكين_الخاص_بك_هنا"
 
 # ==========================================
 # 3. قاعدة بيانات الخلفيات الـ 15
@@ -115,10 +115,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # 5. تشغيل البوت
 # ==========================================
 if __name__ == "__main__":
-    # تشغيل سيرفر الويب في الخلفية
     keep_alive()
     
-    # تشغيل البوت
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("wallpapers", start))
