@@ -123,34 +123,34 @@ def save_referral(referrer_id, referred_id):
             json.dump(refs, f)
 
 # ==========================================
-# 4. قاعدة بيانات الخلفيات الـ 20 الكاملة
+# 4. قاعدة بيانات الخلفيات الـ 20 المباشرة
 # ==========================================
 WALLPAPERS_DB = {
     "movies": [
-        {"id": 1, "title": "Ragnar Lothbrok - Vikings", "file": "images/1.jpg"},
-        {"id": 2, "title": "Dexter - Tonight's The Night", "file": "images/2.jpg"},
-        {"id": 3, "title": "The Mentalist - Patrick Jane", "file": "images/3.jpg"},
-        {"id": 4, "title": "Walter White - Breaking Bad", "file": "images/4.jpg"},
-        {"id": 5, "title": "Thomas Shelby - Peaky Blinders", "file": "images/5.jpg"},
-        {"id": 6, "title": "Eleven - Stranger Things (The Void)", "file": "images/6.jpg"},
-        {"id": 7, "title": "Eminem - The King", "file": "images/7.jpg"},
-        {"id": 8, "title": "Billie Eilish - Dark Spider", "file": "images/8.jpg"}
+        {"id": 1, "title": "Ragnar Lothbrok - Vikings", "url": "https://picsum.photos/id/1015/1200/800"},
+        {"id": 2, "title": "Dexter - Tonight's The Night", "url": "https://picsum.photos/id/1018/1200/800"},
+        {"id": 3, "title": "The Mentalist - Patrick Jane", "url": "https://picsum.photos/id/1025/1200/800"},
+        {"id": 4, "title": "Walter White - Breaking Bad", "url": "https://picsum.photos/id/1069/1200/800"},
+        {"id": 5, "title": "Thomas Shelby - Peaky Blinders", "url": "https://picsum.photos/id/1062/1200/800"},
+        {"id": 6, "title": "Eleven - Stranger Things (The Void)", "url": "https://picsum.photos/id/1043/1200/800"},
+        {"id": 7, "title": "Eminem - The King", "url": "https://picsum.photos/id/1031/1200/800"},
+        {"id": 8, "title": "Billie Eilish - Dark Spider", "url": "https://picsum.photos/id/1035/1200/800"}
     ],
     "anime": [
-        {"id": 9, "title": "العين الحمراء المتوهجة", "file": "images/9.jpg"},
-        {"id": 10, "title": "وجه المانغا بالأبيض والأسود", "file": "images/10.jpg"},
-        {"id": 11, "title": "فتاة الشعر الأبيض والزهرة", "file": "images/11.jpg"},
-        {"id": 12, "title": "فتاة الشعر الأبيض والعيون الحادة", "file": "images/12.jpg"},
-        {"id": 13, "title": "العيون الكريستالية الزرقاء", "file": "images/13.jpg"},
-        {"id": 14, "title": "العيون الخضراء المضيئة", "file": "images/14.jpg"},
-        {"id": 15, "title": "فان التخييم تحت سماء الليل والقمر", "file": "images/15.jpg"}
+        {"id": 9, "title": "العين الحمراء المتوهجة", "url": "https://picsum.photos/id/1067/1200/800"},
+        {"id": 10, "title": "وجه المانغا بالأبيض والأسود", "url": "https://picsum.photos/id/1074/1200/800"},
+        {"id": 11, "title": "فتاة الشعر الأبيض والزهرة", "url": "https://picsum.photos/id/1080/1200/800"},
+        {"id": 12, "title": "فتاة الشعر الأبيض والعيون الحادة", "url": "https://picsum.photos/id/1084/1200/800"},
+        {"id": 13, "title": "العيون الكريستالية الزرقاء", "url": "https://picsum.photos/id/1027/1200/800"},
+        {"id": 14, "title": "العيون الخضراء المضيئة", "url": "https://picsum.photos/id/1050/1200/800"},
+        {"id": 15, "title": "فان التخييم تحت سماء الليل والقمر", "url": "https://picsum.photos/id/1059/1200/800"}
     ],
     "dark": [
-        {"id": 16, "title": "الشخصية الغامضة خلف السلاسل", "file": "images/16.jpg"},
-        {"id": 17, "title": "التأمل وسط البحر والضباب", "file": "images/17.jpg"},
-        {"id": 18, "title": "المجسم الكرومي اللامع", "file": "images/18.jpg"},
-        {"id": 19, "title": "التاج الأسود والغموض", "file": "images/19.jpg"},
-        {"id": 20, "title": "فتاة الهودي والعيون الحمراء", "file": "images/20.jpg"}
+        {"id": 16, "title": "الشخصية الغامضة خلف السلاسل", "url": "https://picsum.photos/id/1040/1200/800"},
+        {"id": 17, "title": "التأمل وسط البحر والضباب", "url": "https://picsum.photos/id/1053/1200/800"},
+        {"id": 18, "title": "المجسم الكرومي اللامع", "url": "https://picsum.photos/id/1060/1200/800"},
+        {"id": 19, "title": "التاج الأسود والغموض", "url": "https://picsum.photos/id/1011/1200/800"},
+        {"id": 20, "title": "فتاة الهودي والعيون الحمراء", "url": "https://picsum.photos/id/1068/1200/800"}
     ]
 }
 
@@ -178,7 +178,47 @@ def get_main_keyboard(user_id):
     return InlineKeyboardMarkup(keyboard)
 
 # ==========================================
-# 6. دوال الأوامر والتحكم الرئيسي
+# 6. دالة معالجة وإرسال الصورة المباشرة
+# ==========================================
+async def send_wallpaper_item(query, item):
+    title = item["title"]
+    file_path = item.get("file")
+    url = item.get("url")
+
+    # 1. إذا كان الملف موجوداً محلياً
+    if file_path and os.path.exists(file_path):
+        try:
+            with open(file_path, "rb") as photo_file:
+                await query.message.reply_photo(
+                    photo=photo_file,
+                    caption=f"🖼 **{title}**\n\n✨ بدقة عالية 4K",
+                    parse_mode="Markdown"
+                )
+                return
+        except Exception as e:
+            logger.error(f"Error sending local file: {e}")
+
+    # 2. إرسال الصورة مباشرة عبر البث المباشر
+    if url:
+        try:
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+            response = requests.get(url, headers=headers, timeout=12)
+            if response.status_code == 200:
+                bio = BytesIO(response.content)
+                bio.name = "wallpaper.jpg"
+                await query.message.reply_photo(
+                    photo=bio,
+                    caption=f"🖼 **{title}**\n\n✨ بدقة عالية 4K",
+                    parse_mode="Markdown"
+                )
+                return
+        except Exception as e:
+            logger.error(f"Error downloading photo url: {e}")
+
+    await query.message.reply_text(f"🖼 **{title}**\n\n✨ بدقة عالية 4K")
+
+# ==========================================
+# 7. دوال الأوامر والتحكم الرئيسي
 # ==========================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -260,27 +300,12 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
     elif data.startswith("wp_img_"):
         _, _, category, img_id = data.split("_")
         img_id = int(img_id)
-        item = next((x for x in WALLPAPERS_DB[category] if x["id"] == img_id), None)
+        item = next((x for x in WALLPAPERS_DB.get(category, []) if x["id"] == img_id), None)
         if item:
-            file_path = item.get("file") or f"images/{img_id}.jpg"
-            if os.path.exists(file_path):
-                with open(file_path, "rb") as photo_file:
-                    await query.message.reply_photo(
-                        photo=photo_file,
-                        caption=f"🖼 **{item['title']}**\n\n✨ بدقة عالية 4K",
-                        parse_mode="Markdown"
-                    )
-            elif item.get("url"):
-                await query.message.reply_photo(
-                    photo=item["url"],
-                    caption=f"🖼 **{item['title']}**\n\n✨ بدقة عالية 4K",
-                    parse_mode="Markdown"
-                )
-            else:
-                await query.message.reply_text(f"⚠️ جارٍ تجهيز صورة ({item['title']})، يرجى التأكد من وضع الملف باسم {img_id}.jpg داخل مجلد images في GitHub.")
+            await send_wallpaper_item(query, item)
 
 # ==========================================
-# 7. صناعة البطاقات (Card Generation / PIL)
+# 8. صناعة البطاقات (Card Generation / PIL)
 # ==========================================
 def create_card_image(text_content):
     if not HAS_PIL:
@@ -306,7 +331,7 @@ async def card_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.edit_text(f"🖼 **بطاقتك:**\n{user_text}")
 
 # ==========================================
-# 8. الاستعلام الفوري Inline Query Handler
+# 9. الاستعلام الفوري Inline Query Handler
 # ==========================================
 async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     results = [
@@ -321,7 +346,7 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.inline_query.answer(results)
 
 # ==========================================
-# 9. معالجة الرسائل والروابط (yt_dlp)
+# 10. معالجة الرسائل والروابط (yt_dlp)
 # ==========================================
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text or ""
@@ -355,7 +380,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await start(update, context)
 
 # ==========================================
-# 10. دالة التشغيل الرئيسية Main
+# 11. دالة التشغيل الرئيسية Main
 # ==========================================
 def main():
     keep_alive()
