@@ -232,7 +232,6 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         video_obj = update.message.video or update.message.document
         
-        # التحقق من حجم الفيديو (20MB كحد أقصى للبوت المجاني)
         if hasattr(video_obj, 'file_size') and video_obj.file_size > 20 * 1024 * 1024:
             await status_msg.edit_text("⚠️ **حجم الفيديو يتجاوز 20 ميجابايت.** يرجى إرسال مقطع بحجم أصغر.")
             return
@@ -253,12 +252,14 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
         
         payload = {
             "input": {
-                "video": public_video_url
+                "image": public_video_url,
+                "scale": 2,
+                "face_enhance": True
             }
         }
 
-        # استخدام نموذج lucataco/video-upscaler المباشر لرفع دقة الفيديوهات
-        model_url = "https://api.replicate.com/v1/models/lucataco/video-upscaler/predictions"
+        # استخدام نموذج nightmareai/real-esrgan الرسمي المباشر
+        model_url = "https://api.replicate.com/v1/models/nightmareai/real-esrgan/predictions"
         resp = requests.post(model_url, headers=headers, json=payload, timeout=20)
         prediction = resp.json()
 
