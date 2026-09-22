@@ -66,6 +66,7 @@ REFERRALS_FILE = "referrals.json"
 ADMIN_ID = os.getenv("ADMIN_ID")
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN")
+WEB_SITE_URL = os.getenv("WEB_SITE_URL", "https://ab-rbx9.onrender.com")
 
 # ==========================================
 # 3. إدارة الإحصائيات والمستخدمين والإحالات
@@ -107,6 +108,10 @@ def get_referrals():
             pass
     return {}
 
+def get_user_ref_count(user_id):
+    refs = get_referrals()
+    return len(refs.get(str(user_id), []))
+
 def save_referral(referrer_id, referred_id):
     refs = get_referrals()
     key = str(referrer_id)
@@ -145,48 +150,117 @@ WALLPAPERS_DB = {
 }
 
 # ==========================================
-# 5. دوال قسم الخلفيات
+# 5. بناء لوحة القائمة الرئيسية والترحيب
 # ==========================================
-async def wallpapers_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("🎬 مسلسلات وسينما (3)", callback_data="wp_cat_movies")],
-        [InlineKeyboardButton("🎨 أنمي وفن رقمي (7)", callback_data="wp_cat_anime")],
-        [InlineKeyboardButton("🌌 أنماط داكنة وفضاء (5)", callback_data="wp_cat_dark")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    text = "🎨 **قسم الخلفيات عالية الدقة (4K):**\n\nاختر التصنيف المفضل لديك:"
-    
-    if update.message:
-        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
-    elif update.callback_query:
-        await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+WELCOME_TEXT = (
+    "🇸🇦 **كل عام والوطن بألف خير | اليوم الوطني السعودي 96** 🇸🇦\n\n"
+    "أهلاً بك في بوت وموقع التحميل والمسح الذكي المجاني! ⚡\n\n"
+    "• أرسل رابط الفيديو للتحميل المباشر خالي من الحقوق.\n"
+    "• أو استخدم الموقع لمسح الكتابة والنصوص بالذكاء الاصطناعي مجاناً! 💚\n\n"
+    "🛡 حقوق البرمجة والتطوير محفوظة لمطور الخدمة ©"
+)
 
-async def wallpapers_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def get_main_keyboard(user_id):
+    ref_count = get_user_ref_count(user_id)
+    keyboard = [
+        [InlineKeyboardButton("🚀 زيارة موقع التحميل والمسح الذكي", url=WEB_SITE_URL)],
+        [InlineKeyboardButton("🎨 إنشاء بطاقة تهنئة باليوم الوطني", callback_data="cmd_card")],
+        [InlineKeyboardButton("🖼 قسم خلفيات 4K عالية الدقة", callback_data="wp_main")],
+        [InlineKeyboardButton(f"🎁 رابط الدعوة الخاص بك ({ref_count} مدعوين)", callback_data="cmd_ref")],
+        [InlineKeyboardButton("📜 شروط الاستخدام وإخلاء المسؤولية", callback_data="cmd_terms")],
+        [InlineKeyboardButton("🟢 مشاركة البوت مع الأصدقاء", switch_inline_query="🚀 جرب هذا البوت الرائع لتحميل المقاطع واستعراض خلفيات الـ 4K!")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+# ==========================================
+# 6. دوال الأوامر والتحكم الرئيسي
+# ==========================================
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    save_user(user_id)
+    
+    # تسجيل الإحالة عند الدخول من رابط مشاركة
+    if context.args:
+        referrer_id = context.args[0]
+        if referrer_id != str(user_id):
+            save_referral(referrer_id, user_id)
+
+    reply_markup = get_main_keyboard(user_id)
+    await update.message.reply_text(WELCOME_TEXT, reply_markup=reply_markup, parse_mode="Markdown")
+
+async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data
-    
-    if not data.startswith("wp_"):
-        return
-
+    user_id = query.from_user.id
+    bot_username = context.bot.username or "bot"
     await query.answer()
 
-    if data.startswith("wp_cat_"):
+    # --- القائمة الرئيسية ---
+    if data == "cmd_main":
+        await query.edit_message_text(
+            WELCOME_TEXT,
+            reply_markup=get_main_keyboard(user_id),
+            parse_mode="Markdown"
+        )
+
+    # --- إنشاء بطاقة ---
+    elif data == "cmd_card":
+        text = (
+            "🎨 **إنشاء بطاقة تهنئة باليوم الوطني:**\n\n"
+            "لإنشاء بطاقتك الخاصة، اكتب الأمر `/card` متبوعاً بالاسم أو النص المفضل لديك.\n\n"
+            "**مثال:**\n`/card كل عام والوطن بخير - سلمان`"
+        )
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="cmd_main")]])
+        await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
+
+    # --- رابط الدعوة والإحالات ---
+    elif data == "cmd_ref":
+        ref_link = f"https://t.me/{bot_username}?start={user_id}"
+        ref_count = get_user_ref_count(user_id)
+        text = (
+            f"🎁 **رابط الدعوة الخاص بك:**\n\n"
+            f"`{ref_link}`\n\n"
+            f"📊 **عدد المدعوين لديك:** `{ref_count}` شخص.\n"
+            f"قم بنشر الرابط بين أصدقائك لاستخدام البوت المباشر!"
+        )
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="cmd_main")]])
+        await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
+
+    # --- شروط الاستخدام ---
+    elif data == "cmd_terms":
+        text = (
+            "📜 **شروط الاستخدام وإخلاء المسؤولية:**\n\n"
+            "1. هذا البوت مخصص للاستخدام الشخصي والمجاني فقط.\n"
+            "2. يخلي المطور مسؤوليته الكاملة عن أي استخدام غير قانوني للمحتوى المحمل.\n"
+            "3. جميع حقوق البرمجة والتطوير محفوظة لمطور الخدمة ©."
+        )
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="cmd_main")]])
+        await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
+
+    # --- التصفح داخل قسم الخلفيات ---
+    elif data == "wp_main":
+        keyboard = [
+            [InlineKeyboardButton("🎬 مسلسلات وسينما (3)", callback_data="wp_cat_movies")],
+            [InlineKeyboardButton("🎨 أنمي وفن رقمي (7)", callback_data="wp_cat_anime")],
+            [InlineKeyboardButton("🌌 أنماط داكنة وفضاء (5)", callback_data="wp_cat_dark")],
+            [InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="cmd_main")]
+        ]
+        text = "🎨 **قسم الخلفيات عالية الدقة (4K):**\n\nاختر التصنيف المفضل لديك:"
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+
+    elif data.startswith("wp_cat_"):
         category = data.split("_")[2]
         items = WALLPAPERS_DB.get(category, [])
-        
         keyboard = []
         for item in items:
             keyboard.append([InlineKeyboardButton(item["title"], callback_data=f"wp_img_{category}_{item['id']}")])
-        
         keyboard.append([InlineKeyboardButton("🔙 العودة لقائمة الخلفيات", callback_data="wp_main")])
-        reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await query.edit_message_text("🖼 **اختر الخلفية التي تريدها:**", reply_markup=reply_markup, parse_mode="Markdown")
+        await query.edit_message_text("🖼 **اختر الخلفية التي تريدها:**", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
     elif data.startswith("wp_img_"):
         _, _, category, img_id = data.split("_")
         img_id = int(img_id)
-        
         item = next((x for x in WALLPAPERS_DB[category] if x["id"] == img_id), None)
         if item:
             await query.message.reply_photo(
@@ -195,18 +269,15 @@ async def wallpapers_callback_handler(update: Update, context: ContextTypes.DEFA
                 parse_mode="Markdown"
             )
 
-    elif data == "wp_main":
-        await wallpapers_command(update, context)
-
 # ==========================================
-# 6. صناعة البطاقات (Card Generation / PIL)
+# 7. صناعة البطاقات (Card Generation / PIL)
 # ==========================================
 def create_card_image(text_content):
     if not HAS_PIL:
         return None
-    img = Image.new('RGB', (800, 400), color=(30, 30, 30))
+    img = Image.new('RGB', (800, 400), color=(15, 81, 50)) # لون خضراء لليوم الوطني
     d = ImageDraw.Draw(img)
-    d.text((50, 180), f"Card: {text_content}", fill=(255, 255, 255))
+    d.text((50, 180), f"{text_content}", fill=(255, 255, 255))
     bio = BytesIO()
     bio.name = 'card.png'
     img.save(bio, 'PNG')
@@ -214,59 +285,39 @@ def create_card_image(text_content):
     return bio
 
 async def card_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_text = " ".join(context.args) if context.args else "معايدة خاصة"
+    user_text = " ".join(context.args) if context.args else "دام عزك يا وطن 🇸🇦"
     msg = await update.message.reply_text("🎨 جاري تصميم البطاقة...")
     
     bio = create_card_image(user_text)
     if bio:
-        await update.message.reply_photo(photo=bio, caption=f"🖼 **بطاقتك جاهزة:** {user_text}")
+        await update.message.reply_photo(photo=bio, caption=f"🖼 **بطاقتك جاهزة:**\n{user_text}")
         await msg.delete()
     else:
-        await msg.edit_text(f"🖼 **بطاقتك:** {user_text}")
+        await msg.edit_text(f"🖼 **بطاقتك:**\n{user_text}")
 
 # ==========================================
-# 7. الاستعلام الفوري Inline Query Handler
+# 8. الاستعلام الفوري Inline Query Handler
 # ==========================================
 async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.inline_query.query
     results = [
         InlineQueryResultArticle(
             id="1",
-            title="مشاركة بوت التنزيل والخلفيات",
+            title="مشاركة بوت اليوم الوطني والتحميل",
             input_message_content=InputTextMessageContent(
-                "🤖 استخدم هذا البوت لتحميل المقاطع واستعراض أجمل خلفيات الـ 4K!"
+                "🇸🇦 جرب بوت وموقع التحميل والمسح الذكي المجاني بالذكاء الاصطناعي وخلفيات 4K!"
             )
         )
     ]
     await update.inline_query.answer(results)
 
 # ==========================================
-# 8. دوال الأوامر والتحميل (Start & Download)
+# 9. معالجة الرسائل والروابط (yt_dlp)
 # ==========================================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user:
-        save_user(update.effective_user.id)
-        
-        # معالجة رابط الإحالة إن وجد
-        if context.args:
-            referrer_id = context.args[0]
-            if referrer_id != str(update.effective_user.id):
-                save_referral(referrer_id, update.effective_user.id)
-
-    welcome_text = (
-        "👋 **أهلاً بك في البوت الشامل!**\n\n"
-        "🎬 **تحميل المقاطع:** أرسل رابط أي مقطع فيديو لتنزيله فوراً.\n"
-        "💳 **صناعة البطاقات:** اكتب /card ثم نصك لتصميم بطاقة.\n"
-        "🖼 **قسم الخلفيات:** اكتب /wallpapers لعرض أجمل خلفيات 4K."
-    )
-    await update.message.reply_text(welcome_text, parse_mode="Markdown")
-
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text or ""
     if update.effective_user:
         save_user(update.effective_user.id)
 
-    # التحقق مما إذا كان المدخل رابطاً للتحميل
     if text.startswith("http://") or text.startswith("https://"):
         msg = await update.message.reply_text("⏳ جاري معالجة الرابط والتحميل...")
         try:
@@ -291,10 +342,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"Error downloading: {e}")
             await msg.edit_text("❌ حدث خطأ أثناء تنزيل المقطع. تأكد من صحة الرابط.")
     else:
-        await update.message.reply_text("💡 أرسل رابط مقطع فيديو لتحميله، أو استخدم /wallpapers للخلفيات، أو /card للبطاقات.")
+        await start(update, context)
 
 # ==========================================
-# 9. دالة التشغيل الرئيسية Main
+# 10. دالة التشغيل الرئيسية Main
 # ==========================================
 def main():
     keep_alive()
@@ -304,11 +355,11 @@ def main():
 
     bot_app = Application.builder().token(TOKEN).build()
 
-    # تسجيل كافة الأوامر والمُعالجات (Handlers)
+    # تسجيل الأوامر والـ Handlers
     bot_app.add_handler(CommandHandler("start", start))
     bot_app.add_handler(CommandHandler("card", card_command))
-    bot_app.add_handler(CommandHandler("wallpapers", wallpapers_command))
-    bot_app.add_handler(CallbackQueryHandler(wallpapers_callback_handler, pattern="^wp_"))
+    bot_app.add_handler(CommandHandler("wallpapers", start))
+    bot_app.add_handler(CallbackQueryHandler(main_callback_handler))
     bot_app.add_handler(InlineQueryHandler(inline_query_handler))
     bot_app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
