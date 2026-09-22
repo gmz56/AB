@@ -232,7 +232,7 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         video_obj = update.message.video or update.message.document
         
-        # التحقق من حجم الفيديو (تنبيه عند تجاوز 20MB)
+        # التحقق من حجم الفيديو (20MB كحد أقصى للبوت المجاني)
         if hasattr(video_obj, 'file_size') and video_obj.file_size > 20 * 1024 * 1024:
             await status_msg.edit_text("⚠️ **حجم الفيديو يتجاوز 20 ميجابايت.** يرجى إرسال مقطع بحجم أصغر.")
             return
@@ -252,17 +252,17 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
         }
         
         payload = {
-            "version": "f121d640bd286e1f73f249611b798a5d7396d415082e6d6b0b8c630138980b32",
             "input": {
-                "video": public_video_url,
-                "scale": 2
+                "video": public_video_url
             }
         }
 
-        resp = requests.post("https://api.replicate.com/v1/predictions", headers=headers, json=payload, timeout=20)
+        # استخدام نموذج lucataco/video-upscaler المباشر لرفع دقة الفيديوهات
+        model_url = "https://api.replicate.com/v1/models/lucataco/video-upscaler/predictions"
+        resp = requests.post(model_url, headers=headers, json=payload, timeout=20)
         prediction = resp.json()
 
-        if resp.status_code != 201 and resp.status_code != 200:
+        if resp.status_code not in [200, 201]:
             error_detail = prediction.get("detail") or prediction.get("error") or str(prediction)
             raise Exception(f"Replicate API Error [{resp.status_code}]: {error_detail}")
 
@@ -270,7 +270,7 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
         poll_url = f"https://api.replicate.com/v1/predictions/{prediction_id}"
 
         output_url = None
-        for _ in range(30):
+        for _ in range(35):
             time.sleep(5)
             poll_resp = requests.get(poll_url, headers=headers, timeout=10).json()
             status = poll_resp.get("status")
