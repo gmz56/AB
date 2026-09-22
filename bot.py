@@ -8,7 +8,7 @@ import base64
 import yt_dlp
 from io import BytesIO
 from threading import Thread
-from flask import Flask, render_template_string, request, jsonify
+from flask import Flask, render_template_string, request, jsonify, send_from_directory
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -38,6 +38,11 @@ except ImportError:
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# مجلد التخزين المؤقت للفيديوهات
+UPLOAD_FOLDER = 'temp_uploads'
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
 # ==========================================
 # 1. إعداد سيرفر Flask للاستضافة على Render
 # ==========================================
@@ -46,6 +51,10 @@ app = Flask(__name__)
 @app.route('/')
 def home():
     return "Bot is running online!"
+
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
@@ -66,7 +75,7 @@ REFERRALS_FILE = "referrals.json"
 ADMIN_ID = os.getenv("ADMIN_ID")
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN")
-WEB_SITE_URL = os.getenv("WEB_SITE_URL", "https://ab-rbx9.onrender.com")
+WEB_SITE_URL = os.getenv("WEB_SITE_URL", "https://ab-rbx9.onrender.com").rstrip('/')
 
 # ==========================================
 # 3. إدارة الإحصائيات والمستخدمين والإحالات
@@ -128,8 +137,8 @@ def save_referral(referrer_id, referred_id):
 WELCOME_TEXT = (
     "🇸🇦 **كل عام والوطن بألف خير | اليوم الوطني السعودي 96** 🇸🇦\n\n"
     "أهلاً بك في بوت سلنقح للتحميل والمسح الذكي المجاني! ⚡\n\n"
-    "• أرسل رابط الفيديو للتحميل المباشر خالي من الحقوق.\n"
-    "• أو استخدم الموقع لمسح الكتابة والنصوص بالذكاء الاصطناعي مجاناً! 💚\n\n"
+    "• **لتحميل فيديو من التواصل:** أرسل رابط المقطع مباشرة.\n"
+    "• **لتعديل فيديو بجوالك (4K/AI):** قم بإرسال ملف الفيديو هنا فوراً وسيقوم البوت بمعالجته تلقائياً! 🎬\n\n"
     "🛡 حقوق البرمجة والتطوير محفوظة لمطور الخدمة ©"
 )
 
@@ -137,7 +146,6 @@ def get_main_keyboard(user_id):
     ref_count = get_user_ref_count(user_id)
     keyboard = [
         [InlineKeyboardButton("🚀 زيارة موقع التحميل والمسح الذكي", url=WEB_SITE_URL)],
-        [InlineKeyboardButton("⚡ رفع جودة الفيديو وسلاسته (4K/60fps)", callback_data="cmd_enhance")],
         [InlineKeyboardButton("🎨 إنشاء بطاقة تهنئة باليوم الوطني", callback_data="cmd_card")],
         [InlineKeyboardButton(f"🎁 رابط الدعوة الخاص بك ({ref_count} مدعوين)", callback_data="cmd_ref")],
         [InlineKeyboardButton("📜 شروط الاستخدام وإخلاء المسؤولية", callback_data="cmd_terms")],
@@ -146,7 +154,7 @@ def get_main_keyboard(user_id):
     return InlineKeyboardMarkup(keyboard)
 
 # ==========================================
-# 5. دوال الأوامر والتحكم الرئيسي
+# 5. دوال التحكم والقائمة الرئيسية
 # ==========================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -173,20 +181,6 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
             reply_markup=get_main_keyboard(user_id),
             parse_mode="Markdown"
         )
-
-    elif data == "cmd_enhance":
-        text = (
-            "⚡ **طريقة رفع جودة مقاطعك إلى 4K وزيادة سلاستها (60fps):**\n\n"
-            "للحصول على دقة خرافية وإزالة التغبيش من مقاطعك المحفوظة بالجوال مجاناً وبضغطة زر:\n\n"
-            "1️⃣ **تطبيق Wink (الأفضل والأسرع بالذكاء الاصطناعي):**\n"
-            "• افتح التطبيق واختر ميزة **Image Quality / AI Repair**.\n"
-            "• سيقوم معالج الجوال بالذكاء الاصطناعي برفع الدقة إلى 4K وإزالة أي تغبيش فوراً.\n\n"
-            "2️⃣ **تطبيق CapCut (لزيادة السلاسة 60fps):**\n"
-            "• اختر المقطع > **Enhance / الجودة** واضبط الدقة على 4K ومعدل الإطارات (Frame Rate) على 60fps عند التصدير.\n\n"
-            "💡 *هذه الطرق تضمن لك أعلى جودة وسلاسة فائقة دون الانتظار أو استهلاك باقة البيانات!*"
-        )
-        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة لقائمة الخدمات", callback_data="cmd_main")]])
-        await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
 
     elif data == "cmd_card":
         text = (
@@ -220,7 +214,94 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
 
 # ==========================================
-# 6. صناعة البطاقات (Card Generation / PIL)
+# 6. معالجة وتعديل جودة الفيديوهات المرفوعة بالذكاء الاصطناعي
+# ==========================================
+async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    save_user(user_id)
+
+    if not REPLICATE_API_TOKEN:
+        await update.message.reply_text(
+            "⚠️ **خدمة التعديل الآلي غير مفعلة:**\n"
+            "يرجى ضبط مفتاح `REPLICATE_API_TOKEN` في متغيرات البيئة بـ Render لتفعيل الذكاء الاصطناعي."
+        )
+        return
+
+    status_msg = await update.message.reply_text("⏳ **جاري استقبال الفيديو وتجهيزه للمعالجة بالذكاء الاصطناعي...**")
+
+    try:
+        video_obj = update.message.video or update.message.document
+        video_file = await context.bot.get_file(video_obj.file_id)
+        
+        file_name = f"user_{user_id}_{int(time.time())}.mp4"
+        local_path = os.path.join(UPLOAD_FOLDER, file_name)
+        await video_file.download_to_drive(local_path)
+
+        public_video_url = f"{WEB_SITE_URL}/uploads/{file_name}"
+        await status_msg.edit_text("✨ **جاري تحسين الفيديو ورفعه لـ 4K وإزالة التغبيش عبر الذكاء الاصطناعي...**\n قد يستغرق ذلك دقيقة.")
+
+        # استدعاء نموذج الذكاء الاصطناعي لرفع جودة الفيديو عبر Replicate API
+        headers = {
+            "Authorization": f"Bearer {REPLICATE_API_TOKEN}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "version": "f121d640bd286e1f73f249611b798a5d7396d415082e6d6b0b8c630138980b32",
+            "input": {
+                "video": public_video_url,
+                "scale": 2
+            }
+        }
+
+        resp = requests.post("https://api.replicate.com/v1/predictions", headers=headers, json=payload, timeout=20)
+        prediction = resp.json()
+
+        if "id" not in prediction:
+            raise Exception("فشل في بدء عملية الذكاء الاصطناعي.")
+
+        prediction_id = prediction["id"]
+        poll_url = f"https://api.replicate.com/v1/predictions/{prediction_id}"
+
+        # انتظار انتهاء المعالجة
+        output_url = None
+        for _ in range(30):
+            time.sleep(5)
+            poll_resp = requests.get(poll_url, headers=headers, timeout=10).json()
+            status = poll_resp.get("status")
+
+            if status == "succeeded":
+                output_url = poll_resp.get("output")
+                break
+            elif status == "failed":
+                raise Exception("فشلت معالجة المقطع بواسطة نموذج الذكاء الاصطناعي.")
+
+        if output_url:
+            await status_msg.edit_text("✅ **تمت المعالجة بنجاح! جاري إرسال المقطع بكامل الجودة...**")
+            
+            # تنزيل الفيديو المعدل وإرساله للمستخدم
+            enhanced_data = requests.get(output_url).content
+            out_bio = BytesIO(enhanced_data)
+            out_bio.name = "enhanced_4k_video.mp4"
+            
+            await update.message.reply_video(
+                video=out_bio,
+                caption="⚡ **تم رفع جودة مقطعك وتوضيحه بنجاح بدقة 4K!**"
+            )
+            await status_msg.delete()
+        else:
+            await status_msg.edit_text("❌ استغرقت معالجة الفيديو وقتاً أطول من المتوقع، يرجى المحاولة بمقطع أقصر.")
+
+    except Exception as e:
+        logger.error(f"Error enhancing video: {e}")
+        await status_msg.edit_text("❌ حدث خطأ أثناء معالجة الفيديو. تأكد من إعداد مفتاح API ومساحة الملف.")
+    
+    finally:
+        if 'local_path' in locals() and os.path.exists(local_path):
+            os.remove(local_path)
+
+# ==========================================
+# 7. صناعة البطاقات (Card Generation / PIL)
 # ==========================================
 def create_card_image(text_content):
     if not HAS_PIL:
@@ -246,7 +327,7 @@ async def card_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.edit_text(f"🖼 **بطاقتك:**\n{user_text}")
 
 # ==========================================
-# 7. الاستعلام الفوري Inline Query Handler
+# 8. الاستعلام الفوري Inline Query Handler
 # ==========================================
 async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     results = [
@@ -254,14 +335,14 @@ async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             id="1",
             title="مشاركة بوت اليوم الوطني والتحميل",
             input_message_content=InputTextMessageContent(
-                "🇸🇦 جرب بوت سلنقح المجاني للتحميل ومسح الذكاء الاصطناعي!"
+                "🇸🇦 جرب بوت سلنقح المجاني للتحميل ومسح الذكاء الاصطناعي وتعديل المقاطع!"
             )
         )
     ]
     await update.inline_query.answer(results)
 
 # ==========================================
-# 8. معالجة الرسائل والروابط (yt_dlp)
+# 9. معالجة النصوص والروابط (yt_dlp)
 # ==========================================
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text or ""
@@ -295,7 +376,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await start(update, context)
 
 # ==========================================
-# 9. دالة التشغيل الرئيسية Main
+# 10. دالة التشغيل الرئيسية Main
 # ==========================================
 def main():
     keep_alive()
@@ -309,9 +390,12 @@ def main():
     bot_app.add_handler(CommandHandler("card", card_command))
     bot_app.add_handler(CallbackQueryHandler(main_callback_handler))
     bot_app.add_handler(InlineQueryHandler(inline_query_handler))
+    
+    # معالج الفيديوهات المرفوعة تلقائياً
+    bot_app.add_handler(MessageHandler(filters.VIDEO | filters.Document.VIDEO, handle_video_upload))
     bot_app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-    print("🤖 البوت يعمل بنجاح ومستعد لاستقبال الأوامر...")
+    print("🤖 البوت يعمل بنجاح ومستعد لاستقبال الأوامر والمقاطع...")
     bot_app.run_polling()
 
 if __name__ == "__main__":
