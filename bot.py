@@ -7,7 +7,7 @@ import yt_dlp
 import base64
 from io import BytesIO
 from threading import Thread
-from flask import Flask, send_from_directory, render_template_string, request, jsonify, send_file
+from flask import Flask, send_from_directory, render_template_string, request, jsonify
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -152,7 +152,6 @@ HTML_TEMPLATE = """
     </div>
 
     <div class="container col-lg-8">
-        <!-- التبويبات للخدمات المباشرة -->
         <ul class="nav nav-pills justify-content-center mb-4" id="pills-tab" role="tablist">
             <li class="nav-item">
                 <button class="nav-link active" id="tab-download" data-bs-toggle="pill" data-bs-target="#content-download">📥 تحميل مقطع</button>
@@ -166,8 +165,6 @@ HTML_TEMPLATE = """
         </ul>
 
         <div class="tab-content" id="pills-tabContent">
-            
-            <!-- 1. أداة التحميل المباشر -->
             <div class="tab-pane fade show active" id="content-download">
                 <div class="tool-card">
                     <h4 class="fw-bold text-center mb-3">📥 تنزيل مقطع من رابط</h4>
@@ -180,7 +177,6 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <!-- 2. أداة توضيح الفيديو المباشر -->
             <div class="tab-pane fade" id="content-enhance">
                 <div class="tool-card">
                     <h4 class="fw-bold text-center mb-3">⚡ توضيح ورفع دقة الفيديو</h4>
@@ -195,7 +191,6 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <!-- 3. أداة إنشاء بطاقة تهنئة -->
             <div class="tab-pane fade" id="content-card">
                 <div class="tool-card">
                     <h4 class="fw-bold text-center mb-3">🎨 تصميم بطاقة تهنئة فورية</h4>
@@ -209,7 +204,6 @@ HTML_TEMPLATE = """
                     <div id="card-status" class="mt-4 text-center"></div>
                 </div>
             </div>
-
         </div>
 
         <div class="text-center my-3">
@@ -227,17 +221,13 @@ HTML_TEMPLATE = """
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // دالة التحميل المباشر
         async function processDownload() {
             const url = document.getElementById('dl-url').value;
             const status = document.getElementById('dl-status');
             const btn = document.getElementById('btn-dl');
-
             if (!url) { alert('يرجى إدخال الرابط أولاً'); return; }
-
             btn.disabled = true;
             status.innerHTML = '<div class="spinner-border text-success"></div> <p class="mt-2 text-warning">جاري معالجة واستخراج المقطع...</p>';
-
             try {
                 const res = await fetch('/api/web_download', {
                     method: 'POST',
@@ -256,25 +246,17 @@ HTML_TEMPLATE = """
             btn.disabled = false;
         }
 
-        // دالة توضيح الفيديو المباشر
         async function processEnhance() {
             const fileInput = document.getElementById('enhance-file');
             const status = document.getElementById('enhance-status');
             const btn = document.getElementById('btn-enhance');
-
             if (!fileInput.files[0]) { alert('يرجى اختيار فيديو من جهازك'); return; }
-
             const formData = new FormData();
             formData.append('video', fileInput.files[0]);
-
             btn.disabled = true;
             status.innerHTML = '<div class="spinner-border text-success"></div> <p class="mt-2 text-warning">جاري رفع وتوضيح الفيديو مجاناً عبر السيرفر...</p>';
-
             try {
-                const res = await fetch('/api/web_enhance', {
-                    method: 'POST',
-                    body: formData
-                });
+                const res = await fetch('/api/web_enhance', { method: 'POST', body: formData });
                 const data = await res.json();
                 if (data.success) {
                     status.innerHTML = `
@@ -288,20 +270,17 @@ HTML_TEMPLATE = """
                     status.innerHTML = `<span class="text-danger">❌ ${data.error}</span>`;
                 }
             } catch(e) {
-                status.innerHTML = '<span class="text-danger">❌ تعذر معالجة الفيديو، تأكد من أن الحجم أقل من 20MB.</span>';
+                status.innerHTML = '<span class="text-danger">❌ تعذر معالجة الفيديو.</span>';
             }
             btn.disabled = false;
         }
 
-        // دالة بطاقات التهنئة المباشرة
         async function processCard() {
             const text = document.getElementById('card-text').value;
             const status = document.getElementById('card-status');
             const btn = document.getElementById('btn-card');
-
             btn.disabled = true;
             status.innerHTML = '<div class="spinner-border text-success"></div> <p class="mt-2 text-warning">جاري تصميم البطاقة...</p>';
-
             try {
                 const res = await fetch('/api/web_card', {
                     method: 'POST',
@@ -343,22 +322,14 @@ def uploaded_file(filename):
 def web_download():
     data = request.json or {}
     url = data.get('url')
-    if not url:
-        return jsonify({'success': False, 'error': 'الرابط غير متاح'})
+    if not url: return jsonify({'success': False, 'error': 'الرابط غير متاح'})
     try:
         timestamp = int(time.time())
         out_name = f"web_dl_{timestamp}.mp4"
         out_path = os.path.join(UPLOAD_FOLDER, out_name)
-        
-        ydl_opts = {
-            'format': 'best',
-            'outtmpl': out_path,
-            'quiet': True,
-            'no_warnings': True
-        }
+        ydl_opts = {'format': 'best', 'outtmpl': out_path, 'quiet': True}
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
-
         increment_stats()
         return jsonify({'success': True, 'url': f'/uploads/{out_name}'})
     except Exception as e:
@@ -369,39 +340,30 @@ def web_download():
 def web_enhance():
     if 'video' not in request.files:
         return jsonify({'success': False, 'error': 'لم يتم العثور على ملف الفيديو'})
-    
     file = request.files['video']
     timestamp = int(time.time())
     in_name = f"web_in_{timestamp}.mp4"
     out_name = f"web_out_{timestamp}.mp4"
-    
     in_path = os.path.join(UPLOAD_FOLDER, in_name)
     out_path = os.path.join(UPLOAD_FOLDER, out_name)
-    
     file.save(in_path)
 
     try:
         filter_str = "scale=w='trunc(iw*1.3/2)*2':h='trunc(ih*1.3/2)*2':flags=bicubic,unsharp=3:3:1.0:3:3:0.0,eq=contrast=1.05:saturation=1.1"
         ffmpeg_cmd = [
-            "ffmpeg", "-y",
-            "-i", in_path,
-            "-vf", filter_str,
-            "-c:v", "libx264",
-            "-preset", "ultrafast",
-            "-crf", "23",
-            "-threads", "0",
-            "-c:a", "aac",
-            "-b:a", "128k",
+            "ffmpeg", "-y", "-i", in_path,
+            "-vf", filter_str, "-c:v", "libx264",
+            "-preset", "ultrafast", "-crf", "23",
+            "-threads", "0", "-c:a", "aac", "-b:a", "128k",
             out_path
         ]
         process = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
         if process.returncode == 0 and os.path.exists(out_path):
             increment_stats()
             if os.path.exists(in_path): os.remove(in_path)
             return jsonify({'success': True, 'url': f'/uploads/{out_name}'})
         else:
-            return jsonify({'success': False, 'error': 'فشلت معالجة هذا النوع من صيغ الفيديو.'})
+            return jsonify({'success': False, 'error': 'فشلت معالجة الفيديو.'})
     except Exception as e:
         logger.error(f"Web Enhance Error: {e}")
         return jsonify({'success': False, 'error': str(e)})
@@ -426,7 +388,7 @@ def keep_alive():
     t.start()
 
 # ==========================================
-# 3. البيانات والمتغيرات العامة والإحصائيات
+# 3. البيانات والإحصائيات
 # ==========================================
 COUNTER_FILE = "stats.json"
 USERS_FILE = "users.json"
@@ -439,16 +401,14 @@ WEB_SITE_URL = os.getenv("WEB_SITE_URL", "https://ab-rbx9.onrender.com").rstrip(
 def get_stats():
     if os.path.exists(COUNTER_FILE):
         try:
-            with open(COUNTER_FILE, 'r') as f:
-                return json.load(f)
+            with open(COUNTER_FILE, 'r') as f: return json.load(f)
         except: pass
     return {"downloads": 0}
 
 def increment_stats():
     stats = get_stats()
     stats["downloads"] = stats.get("downloads", 0) + 1
-    with open(COUNTER_FILE, 'w') as f:
-        json.dump(stats, f)
+    with open(COUNTER_FILE, 'w') as f: json.dump(stats, f)
     return stats["downloads"]
 
 def save_user(user_id):
@@ -468,8 +428,7 @@ def get_referrals():
     return {}
 
 def get_user_ref_count(user_id):
-    refs = get_referrals()
-    return len(refs.get(str(user_id), []))
+    return len(get_referrals().get(str(user_id), []))
 
 def save_referral(referrer_id, referred_id):
     refs = get_referrals()
@@ -480,7 +439,7 @@ def save_referral(referrer_id, referred_id):
         with open(REFERRALS_FILE, 'w') as f: json.dump(refs, f)
 
 # ==========================================
-# 4. بناء لوحة تيليجرام والترحيب
+# 4. واجهة تيليجرام
 # ==========================================
 WELCOME_TEXT = (
     "🇸🇦 **كل عام والوطن بألف خير | اليوم الوطني السعودي 96** 🇸🇦\n\n"
@@ -501,17 +460,13 @@ def get_main_keyboard(user_id):
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# ==========================================
-# 5. دوال التحكم للبوت
-# ==========================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     save_user(user_id)
     if context.args:
         referrer_id = context.args[0]
         if referrer_id != str(user_id): save_referral(referrer_id, user_id)
-    reply_markup = get_main_keyboard(user_id)
-    await update.message.reply_text(WELCOME_TEXT, reply_markup=reply_markup, parse_mode="Markdown")
+    await update.message.reply_text(WELCOME_TEXT, reply_markup=get_main_keyboard(user_id), parse_mode="Markdown")
 
 async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -523,23 +478,19 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
     if data == "cmd_main":
         await query.edit_message_text(WELCOME_TEXT, reply_markup=get_main_keyboard(user_id), parse_mode="Markdown")
     elif data == "cmd_card":
-        text = "🎨 **إنشاء بطاقة تهنئة باليوم الوطني:**\n\nاكتب الأمر `/card` متبوعاً بنصك."
+        text = "🎨 **إنشاء بطاقة تهنئة:**\n\nاكتب `/card` متبوعاً بنصك."
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة للقائمة", callback_data="cmd_main")]])
         await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
     elif data == "cmd_ref":
         ref_link = f"https://t.me/{bot_username}?start={user_id}"
-        ref_count = get_user_ref_count(user_id)
-        text = f"🎁 **رابط الدعوة الخاص بك:**\n`{ref_link}`\n\n📊 **المدعوين:** `{ref_count}`"
+        text = f"🎁 **رابط الدعوة:**\n`{ref_link}`\n\n📊 **عدد المدعوين:** `{get_user_ref_count(user_id)}`"
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة للقائمة", callback_data="cmd_main")]])
         await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
     elif data == "cmd_terms":
-        text = "📜 **شروط الاستخدام:**\nهذا البوت والخدمة مخصصة للاستخدام المجاني والشخصي 100%."
+        text = "📜 **شروط الاستخدام:**\nهذا البوت والخدمة مجانية 100% للاستخدام الشخصي."
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة للقائمة", callback_data="cmd_main")]])
         await query.edit_message_text(text, reply_markup=kb, parse_mode="Markdown")
 
-# ==========================================
-# 6. معالجة التوضيح في تيليجرام (FFmpeg)
-# ==========================================
 async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     save_user(user_id)
@@ -563,15 +514,10 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         filter_str = "scale=w='trunc(iw*1.3/2)*2':h='trunc(ih*1.3/2)*2':flags=bicubic,unsharp=3:3:1.0:3:3:0.0,eq=contrast=1.05:saturation=1.1"
         ffmpeg_cmd = [
-            "ffmpeg", "-y",
-            "-i", input_path,
-            "-vf", filter_str,
-            "-c:v", "libx264",
-            "-preset", "ultrafast",
-            "-crf", "23",
-            "-threads", "0",
-            "-c:a", "aac",
-            "-b:a", "128k",
+            "ffmpeg", "-y", "-i", input_path,
+            "-vf", filter_str, "-c:v", "libx264",
+            "-preset", "ultrafast", "-crf", "23",
+            "-threads", "0", "-c:a", "aac", "-b:a", "128k",
             output_path
         ]
         process = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -593,9 +539,6 @@ async def handle_video_upload(update: Update, context: ContextTypes.DEFAULT_TYPE
                 try: os.remove(p)
                 except: pass
 
-# ==========================================
-# 7. صناعة البطاقات (PIL)
-# ==========================================
 def create_card_image(text_content):
     if not HAS_PIL: return None
     img = Image.new('RGB', (800, 400), color=(15, 81, 50))
@@ -617,9 +560,6 @@ async def card_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await msg.edit_text(f"🖼 **بطاقتك:**\n{user_text}")
 
-# ==========================================
-# 8. معالجة الرسائل والروابط في تيليجرام
-# ==========================================
 async def inline_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     results = [
         InlineQueryResultArticle(
@@ -654,7 +594,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await start(update, context)
 
 # ==========================================
-# 9. دالة التشغيل الرئيسية Main
+# 5. تشغيل البوت مع التغيير التلقائي للجلسات المعلقة
 # ==========================================
 def main():
     keep_alive()
@@ -671,8 +611,9 @@ def main():
     bot_app.add_handler(MessageHandler(filters.VIDEO | filters.Document.VIDEO, handle_video_upload))
     bot_app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-    print("🤖 البوت والموقع التفاعلي يعملان بنجاح...")
-    bot_app.run_polling()
+    print("🤖 البوت يعمل ومستعد لاستقبال الأوامر...")
+    # إضافة drop_pending_updates=True لمسح أي جلسات أو تعارضات قديمة تلقائياً
+    bot_app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
