@@ -41,7 +41,7 @@ if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
 # ==========================================
-# 1. إعداد سيرفر Flask والواجهة الرسمية للموقع
+# 1. إعداد سيرفر Flask والواجهة الرسمية التفاعلية
 # ==========================================
 app = Flask(__name__)
 
@@ -64,7 +64,7 @@ HTML_TEMPLATE = """
             flex-direction: column;
         }
         .hero-section {
-            padding: 70px 20px 40px;
+            padding: 60px 20px 30px;
             text-align: center;
         }
         .brand-badge {
@@ -78,7 +78,7 @@ HTML_TEMPLATE = """
             margin-bottom: 25px;
         }
         .hero-title {
-            font-size: 2.6rem;
+            font-size: 2.5rem;
             font-weight: 900;
             margin-bottom: 20px;
             background: linear-gradient(45deg, #2ecc71, #ffffff);
@@ -87,9 +87,9 @@ HTML_TEMPLATE = """
         }
         .hero-subtitle {
             color: #a0aec0;
-            font-size: 1.15rem;
+            font-size: 1.1rem;
             max-width: 650px;
-            margin: 0 auto 35px;
+            margin: 0 auto 30px;
             line-height: 1.8;
         }
         .btn-green {
@@ -112,7 +112,7 @@ HTML_TEMPLATE = """
             background: rgba(255, 255, 255, 0.03);
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 16px;
-            padding: 25px;
+            padding: 20px;
             text-align: center;
             backdrop-filter: blur(10px);
         }
@@ -123,18 +123,23 @@ HTML_TEMPLATE = """
         }
         .feature-card {
             background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
             border-radius: 20px;
             padding: 30px 20px;
             transition: all 0.3s ease;
             height: 100%;
+            display: block;
+            text-decoration: none !important;
+            cursor: pointer;
         }
         .feature-card:hover {
-            transform: translateY(-5px);
-            border-color: #198754;
+            transform: translateY(-6px);
+            border-color: #2ecc71;
+            background: rgba(25, 135, 84, 0.15);
+            box-shadow: 0 10px 30px rgba(46, 204, 113, 0.2);
         }
         .feature-icon {
-            font-size: 2.5rem;
+            font-size: 2.8rem;
             margin-bottom: 15px;
         }
         footer {
@@ -153,17 +158,17 @@ HTML_TEMPLATE = """
         <div class="brand-badge">🇸🇦 منصة وبوت سلنقح الخدمية 🇸🇦</div>
         <h1 class="hero-title">المنصة الأولى للتحميل والتعديل الذكي المجاني</h1>
         <p class="hero-subtitle">
-            قم بتحميل الفيديوهات من كافة منصات التواصل الاجتماعي بدون حقوق، بالإضافة لخدمة توضيح المقاطع ورفع الدقة مجاناً وبسرعة فائقة عبر البوت!
+            اضغط على أي خدمة أدناه للانتقال المباشر للبوت في تيليجرام وبدء الاستخدام مجاناً وبدون اشتراكات!
         </p>
         <div>
-            <a href="https://t.me/{{ bot_username if bot_username else 'bot' }}" target="_blank" class="btn-green">
+            <a href="https://t.me/{{ bot_username if bot_username else '' }}" target="_blank" class="btn-green">
                 🚀 فتح البوت المباشر في تيليجرام
             </a>
         </div>
     </div>
 
-    <div class="container my-4">
-        <div class="row g-4 justify-content-center">
+    <div class="container my-3">
+        <div class="row g-3 justify-content-center">
             <div class="col-md-4">
                 <div class="stat-card">
                     <div class="stat-number">{{ downloads_count }}</div>
@@ -186,28 +191,31 @@ HTML_TEMPLATE = """
     </div>
 
     <div class="container my-5">
-        <h3 class="text-center fw-bold mb-4">✨ مميزات الخدمة</h3>
+        <h3 class="text-center fw-bold mb-4">✨ اضغط على الخدمة التي تريدها</h3>
         <div class="row g-4">
             <div class="col-md-4">
-                <div class="feature-card text-center">
+                <a href="https://t.me/{{ bot_username if bot_username else '' }}" target="_blank" class="feature-card text-center">
                     <div class="feature-icon">🎬</div>
                     <h5 class="fw-bold text-white mb-2">تحميل الفيديوهات</h5>
-                    <p class="text-secondary mb-0">تحميل مباشر من تيك توك، انستقرام، يوتيوب، وباقي المنصات بدون علامة مائية.</p>
-                </div>
+                    <p class="text-secondary mb-0">تحميل مباشر من تيك توك، انستقرام، يوتيوب وباقي المنصات بدون علامة مائية.</p>
+                    <span class="badge bg-success mt-3 px-3 py-2">اضغط للبدء 👈</span>
+                </a>
             </div>
             <div class="col-md-4">
-                <div class="feature-card text-center">
+                <a href="https://t.me/{{ bot_username if bot_username else '' }}" target="_blank" class="feature-card text-center">
                     <div class="feature-icon">⚡</div>
                     <h5 class="fw-bold text-white mb-2">توضيح ورفع الدقة</h5>
                     <p class="text-secondary mb-0">معالجة الفيديوهات المحفوظة بجوالك وتوضيح معالمها وإزالة التغبيش مجاناً.</p>
-                </div>
+                    <span class="badge bg-success mt-3 px-3 py-2">اضغط للبدء 👈</span>
+                </a>
             </div>
             <div class="col-md-4">
-                <div class="feature-card text-center">
+                <a href="https://t.me/{{ bot_username if bot_username else '' }}" target="_blank" class="feature-card text-center">
                     <div class="feature-icon">🎨</div>
                     <h5 class="fw-bold text-white mb-2">بطاقات اليوم الوطني</h5>
                     <p class="text-secondary mb-0">إنشاء بطاقات تهنئة فورية باسمك بمناسبة اليوم الوطني السعودي 96.</p>
-                </div>
+                    <span class="badge bg-success mt-3 px-3 py-2">اضغط للبدء 👈</span>
+                </a>
             </div>
         </div>
     </div>
