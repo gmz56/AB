@@ -7,6 +7,8 @@ import logging
 import subprocess
 import yt_dlp
 import asyncio
+import smtplib
+from email.message import EmailMessage
 from threading import Thread
 from flask import Flask, send_from_directory, render_template_string, request, jsonify
 
@@ -46,6 +48,10 @@ STC_PAY_NUM = os.getenv("STC_PAY_NUMBER", "لم يحدد")
 IBAN_NUM = os.getenv("IBAN_NUMBER", "لم يحدد")
 BOT_NAME = os.getenv("BOT_USERNAME", "")
 
+# إعدادات البريد الإلكتروني (اختياري للإرسال عبر Email)
+SMTP_EMAIL = os.getenv("SMTP_EMAIL", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+
 # --- إدارة قاعدة البيانات ---
 def load_db():
     if os.path.exists(DATA_FILE):
@@ -72,6 +78,29 @@ def increment_stats():
     stats["downloads"] = stats.get("downloads", 0) + 1
     with open(COUNTER_FILE, 'w') as f: json.dump(stats, f)
     return stats["downloads"]
+
+def send_email_receipt(to_email, subject, body, attachment_path=None):
+    if not SMTP_EMAIL or not SMTP_PASSWORD:
+        return False
+    try:
+        msg = EmailMessage()
+        msg['Subject'] = subject
+        msg['From'] = SMTP_EMAIL
+        msg['To'] = to_email
+        msg.set_content(body)
+        
+        if attachment_path and os.path.exists(attachment_path):
+            with open(attachment_path, 'rb') as f:
+                file_data = f.read()
+                msg.add_attachment(file_data, maintype='image', subtype='png', filename='receipt.png')
+                
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(SMTP_EMAIL, SMTP_PASSWORD)
+            server.send_message(msg)
+        return True
+    except Exception as e:
+        logger.error(f"Email error: {e}")
+        return False
 
 # ==========================================
 # 1. واجهة الموقع التفاعلي (Flask HTML)
@@ -134,17 +163,17 @@ HTML_TEMPLATE = """
             background-color: #198754 !important;
             color: white !important;
         }
-        .form-control {
-            background: rgba(0, 0, 0, 0.4);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+        .form-control, .form-select {
+            background: rgba(0, 0, 0, 0.5) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
             color: white !important;
             border-radius: 12px;
             padding: 12px 18px;
         }
-        .form-control:focus {
-            background: rgba(0, 0, 0, 0.6);
-            border-color: #f1c40f;
-            box-shadow: 0 0 10px rgba(241, 196, 15, 0.3);
+        .form-control:focus, .form-select:focus {
+            background: rgba(0, 0, 0, 0.7) !important;
+            border-color: #f1c40f !important;
+            box-shadow: 0 0 10px rgba(241, 196, 15, 0.3) !important;
         }
         .btn-green {
             background: #198754; color: white; font-weight: 700;
@@ -152,7 +181,6 @@ HTML_TEMPLATE = """
         }
         .btn-green:hover { background: #146c43; color: white; }
         
-        /* كروت الاشتراكات */
         .plan-card {
             background: rgba(255, 255, 255, 0.03);
             border: 1px solid rgba(255, 255, 255, 0.12);
@@ -244,7 +272,6 @@ HTML_TEMPLATE = """
                     
                     <!-- عرض باقات الاشتراكات الثلاث -->
                     <div class="row g-3 mb-4">
-                        <!-- الباقة العادية -->
                         <div class="col-md-4">
                             <div class="plan-card">
                                 <div class="plan-title text-info">🔹 الباقة العادية</div>
@@ -259,7 +286,6 @@ HTML_TEMPLATE = """
                             </div>
                         </div>
 
-                        <!-- الباقة المتوسطة -->
                         <div class="col-md-4">
                             <div class="plan-card">
                                 <div class="plan-title text-success">🔸 الباقة المتوسطة</div>
@@ -275,7 +301,6 @@ HTML_TEMPLATE = """
                             </div>
                         </div>
 
-                        <!-- الباقة الفاخرة الشاملة (12 ميزة) -->
                         <div class="col-md-4">
                             <div class="plan-card featured">
                                 <div class="plan-badge">خصم 35% 🔥</div>
@@ -295,18 +320,31 @@ HTML_TEMPLATE = """
                         </div>
                     </div>
 
-                    <!-- تفاصيل التحويل والتحقق -->
+                    <!-- تفاصيل التحويل -->
                     <div class="p-3 mb-4 border border-warning rounded-3" style="background: rgba(241, 196, 15, 0.05);">
                         <h6 class="fw-bold text-warning mb-2">💳 بيانات التحويل والدفع المباشر:</h6>
                         <p class="mb-1">📲 <b>STC Pay:</b> <code class="fs-6 text-white">{{ stc_pay }}</code></p>
                         <p class="mb-0">🏦 <b>الآيبان البنكي:</b> <code class="fs-6 text-white">{{ iban }}</code></p>
                     </div>
 
-                    <!-- نموذج رفع الإيصال -->
+                    <!-- نموذج رفع الإيصال واختيار الباقة -->
                     <form id="vip-form" onsubmit="submitReceipt(event)">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold text-warning">📌 اختر الباقة التي قمت بتحويل مبلغها:</label>
+                            <select id="vip-plan" class="form-select" required>
+                                <option value="🔹 الباقة العادية (9 ريال / شهرياً)">🔹 الباقة العادية - 9 ريال / شهرياً</option>
+                                <option value="🔸 الباقة المتوسطة (19 ريال / شهرياً)">🔸 الباقة المتوسطة - 19 ريال / شهرياً</option>
+                                <option value="👑 الباقة الفاخرة (29 ريال / شهرياً)" selected>👑 الباقة الفاخرة - 29 ريال / شهرياً (خصم 35%)</option>
+                                <option value="👑 الباقة الفاخرة مدى الحياة (79 ريال)">👑 الباقة الفاخرة - 79 ريال / مدى الحياة</option>
+                            </select>
+                        </div>
                         <div class="mb-3">
                             <label class="form-label">معرف حسابك في تيليجرام (User ID أو اليوزر):</label>
                             <input type="text" id="vip-user-id" class="form-control" placeholder="مثال: @username أو 5310636822" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">البريد الإلكتروني أو رقم الجوال (لاستلام تأكيد الإيصال):</label>
+                            <input type="text" id="vip-contact" class="form-control" placeholder="example@email.com أو 05XXXXXXXX" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">صورة إيصال التحويل:</label>
@@ -370,7 +408,9 @@ HTML_TEMPLATE = """
 
         async function submitReceipt(e) {
             e.preventDefault();
+            const plan = document.getElementById('vip-plan').value;
             const userId = document.getElementById('vip-user-id').value;
+            const contact = document.getElementById('vip-contact').value;
             const fileInput = document.getElementById('vip-receipt');
             const status = document.getElementById('vip-status');
             const btn = document.getElementById('btn-vip-sub');
@@ -378,17 +418,19 @@ HTML_TEMPLATE = """
             if (!fileInput.files[0]) { alert('اختر صورة الإيصال'); return; }
 
             const formData = new FormData();
+            formData.append('plan', plan);
             formData.append('user_info', userId);
+            formData.append('contact', contact);
             formData.append('receipt', fileInput.files[0]);
 
             btn.disabled = true;
-            status.innerHTML = '<div class="spinner-border text-warning"></div> <p class="mt-2 text-warning">جاري إرسال الإيصال للأدمن للتحقق...</p>';
+            status.innerHTML = '<div class="spinner-border text-warning"></div> <p class="mt-2 text-warning">جاري إرسال الإيصال وتأكيد الباقة...</p>';
 
             try {
                 const res = await fetch('/api/web_pay_receipt', { method: 'POST', body: formData });
                 const data = await res.json();
                 if (data.success) {
-                    status.innerHTML = '<div class="alert alert-success">✅ تم إرسال إيصالك بنجاح! سيتم التحقق وتفعيل حسابك في تيليجرام فوراً.</div>';
+                    status.innerHTML = '<div class="alert alert-success">✅ تم إرسال الإيصال والتفاصيل بنجاح! سيتم التحقق وتفعيل اشتراكك فوراً.</div>';
                 } else {
                     status.innerHTML = `<div class="alert alert-danger">❌ ${data.error}</div>`;
                 }
@@ -457,9 +499,12 @@ def web_enhance():
 
 @app.route('/api/web_pay_receipt', methods=['POST'])
 def web_pay_receipt():
+    plan = request.form.get('plan', 'غير محدد')
     user_info = request.form.get('user_info', '')
+    contact = request.form.get('contact', 'غير محدد')
+    
     if 'receipt' not in request.files or not user_info:
-        return jsonify({'success': False, 'error': 'يرجى كتابة المعرف وإرفاق صورة الإيصال'})
+        return jsonify({'success': False, 'error': 'يرجى اختيار الباقة وكتابة المعرف وإرفاق الإيصال'})
     
     file = request.files['receipt']
     timestamp = int(time.time())
@@ -467,7 +512,12 @@ def web_pay_receipt():
     receipt_path = os.path.join(RECEIPTS_FOLDER, receipt_filename)
     file.save(receipt_path)
 
-    # إرسال صورة الإيصال إلى حساب الأدمن في تيليجرام مع زرين للموافقة والرفض
+    # إرسال إشعار بريدي إذا كان معرف البريد الإلكتروني مكتوباً ومفعلاً
+    if "@" in contact:
+        email_body = f"مرحباً،\n\nتم استلام إيصال التحويل الخاص بك بنجاح:\n- الباقة: {plan}\n- المعرف: {user_info}\n- وسيلة التواصل: {contact}\n\nسيتم مراجعة الطلب وتفعيل اشتراكك فوراً."
+        send_email_receipt(contact, "استلام إيصال الاشتراك - منصة VIP", email_body, receipt_path)
+
+    # إرسال التفاصيل كاملة إلى الأدمن في تيليجرام
     if telegram_app_instance and ADMIN_ID:
         try:
             keyboard = [
@@ -477,7 +527,13 @@ def web_pay_receipt():
                 ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            caption = f"💳 **وصل إيصال تحويل جديد من الموقع!**\n\n👤 **معرف العميل:** `{user_info}`\n🕒 **التاريخ:** {time.strftime('%Y-%m-%d %H:%M')}"
+            caption = (
+                f"💳 **إيصال تحويل واشتراك جديد من الموقع!**\n\n"
+                f"📦 **الباقة المختارة:** `{plan}`\n"
+                f"👤 **معرف العميل:** `{user_info}`\n"
+                f"📱 **البريد/الجوال:** `{contact}`\n"
+                f"🕒 **التاريخ:** {time.strftime('%Y-%m-%d %H:%M')}"
+            )
             
             asyncio.run_coroutine_threadsafe(
                 telegram_app_instance.bot.send_photo(
@@ -531,26 +587,9 @@ async def vip_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     vip_text = (
         f"👑 **خطط واشتراكات الـ VIP ({vip_str}):**\n\n"
         f"🔹 **1. الباقة العادية:** **9 ريال** / شهرياً\n"
-        f"• تنزيل بدون حقوق + دقة HD + حد 50MB.\n\n"
         f"🔸 **2. الباقة المتوسطة:** **19 ريال** / شهرياً\n"
-        f"• دقة 1080p + استخراج MP3 + ترجمة تلقائية + حد 100MB.\n\n"
-        f"👑 **3. الباقة الفاخرة الشاملة (12 ميزة كاملة):**\n"
-        f"• السعر الأصلي: ~~45 ريال~~\n"
-        f"• **السعر المخصّم:** **29 ريال** / شهرياً 🔥 *(أو 79 ريال مدى الحياة)*\n\n"
-        f"💎 **حزمة الـ 12 ميزة الشاملة تتضمن:**\n"
-        f"1. معالجة ملفات ضخمة تصل إلى 200MB\n"
-        f"2. تنزيل بدون حقوق المنصات نهائياً\n"
-        f"3. توضيح خارق Ultra-HD 4K & 60FPS\n"
-        f"4. استخراج الصوت MP3 بضغطة زر\n"
-        f"5. ترجمة وكتابة نصوص تلقائية على المقطع\n"
-        f"6. تعليق صوتي واقعي بالذكاء الاصطناعي\n"
-        f"7. دمج شعارك/اللوجو الخاص بك تلقائياً\n"
-        f"8. أولوية معالجة قصوى بدون انتظار\n"
-        f"9. تحميل مقاطع متعددة دفعة واحدة\n"
-        f"10. إزالة حقوق واسم البوت عن كافة الملفات\n"
-        f"11. تصاميم وإطارات حصرية لمشتركي VIP\n"
-        f"12. دعم فني مباشر وأولوية معالجة دائمين\n\n"
-        f"💳 **للدفع والتفعيل:** افتح رابط الموقع بالأسفل واضغط على 'خطط الاشتراكات والدفع' لرفع صورة الإيصال."
+        f"👑 **3. الباقة الفاخرة الشاملة (12 ميزة):** **29 ريال** / شهرياً *(أو 79 ريال مدى الحياة)*\n\n"
+        f"💳 **للدفع والتفعيل:** افتح رابط الموقع بالأسفل، اختار باقتك وارفع صورة الإيصال ليتم تفعيلك فوراً."
     )
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("💳 الانتقال للموقع والدفع", url=WEB_SITE_URL)]
@@ -643,7 +682,6 @@ async def handle_media_or_text(update: Update, context: ContextTypes.DEFAULT_TYP
 def main():
     global telegram_app_instance
     
-    # تشغيل Flask في الخلفية
     t = Thread(target=run_flask)
     t.daemon = True
     t.start()
@@ -653,7 +691,6 @@ def main():
     bot_app = Application.builder().token(TOKEN).build()
     telegram_app_instance = bot_app
 
-    # تسجيل الأوامر والروابط
     bot_app.add_handler(CommandHandler("start", start))
     bot_app.add_handler(CommandHandler("vip", vip_info_command))
     bot_app.add_handler(CommandHandler("makecode", admin_make_code))
