@@ -5,26 +5,13 @@ import random
 import string
 import logging
 import subprocess
+import gc
 import yt_dlp
 import asyncio
 import smtplib
 from email.message import EmailMessage
 from threading import Thread
 from flask import Flask, send_from_directory, render_template_string, request, jsonify
-
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup
-)
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    CallbackQueryHandler,
-    MessageHandler,
-    filters,
-    ContextTypes
-)
 
 # إعداد التسجيل (Logging)
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -48,7 +35,6 @@ STC_PAY_NUM = os.getenv("STC_PAY_NUMBER", "لم يحدد")
 IBAN_NUM = os.getenv("IBAN_NUMBER", "لم يحدد")
 BOT_NAME = os.getenv("BOT_USERNAME", "")
 
-# إعدادات البريد الإلكتروني (اختياري للإرسال عبر Email)
 SMTP_EMAIL = os.getenv("SMTP_EMAIL", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 
@@ -106,6 +92,7 @@ def send_email_receipt(to_email, subject, body, attachment_path=None):
 # 1. واجهة الموقع التفاعلي (Flask HTML)
 # ==========================================
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # حد أقصى 50 ميجابايت لمنع نفاد الذاكرة
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -170,11 +157,6 @@ HTML_TEMPLATE = """
             border-radius: 12px;
             padding: 12px 18px;
         }
-        .form-control:focus, .form-select:focus {
-            background: rgba(0, 0, 0, 0.7) !important;
-            border-color: #f1c40f !important;
-            box-shadow: 0 0 10px rgba(241, 196, 15, 0.3) !important;
-        }
         .btn-green {
             background: #198754; color: white; font-weight: 700;
             padding: 12px 28px; border-radius: 12px; border: none;
@@ -189,14 +171,11 @@ HTML_TEMPLATE = """
             height: 100%;
             display: flex;
             flex-direction: column;
-            transition: all 0.3s ease;
             position: relative;
         }
-        .plan-card:hover { transform: translateY(-5px); }
         .plan-card.featured {
             background: rgba(241, 196, 15, 0.07);
             border: 2px solid #f1c40f;
-            box-shadow: 0 0 20px rgba(241, 196, 15, 0.2);
         }
         .plan-badge {
             position: absolute;
@@ -240,7 +219,6 @@ HTML_TEMPLATE = """
         </ul>
 
         <div class="tab-content">
-            <!-- التنزيل المجاني -->
             <div class="tab-pane fade show active" id="content-download">
                 <div class="tool-card">
                     <h4 class="fw-bold text-center mb-3">📥 تنزيل مقطع من الرابط</h4>
@@ -252,7 +230,6 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <!-- التوضيح -->
             <div class="tab-pane fade" id="content-enhance">
                 <div class="tool-card">
                     <h4 class="fw-bold text-center mb-3">⚡ توضيح ورفع دقة الفيديو</h4>
@@ -264,108 +241,84 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <!-- خطط الاشتراكات والدفع -->
             <div class="tab-pane fade" id="content-vip">
                 <div class="tool-card">
                     <h4 class="fw-bold text-center text-warning mb-2">⭐ اختار باقة الاشتراك المناسبة لك</h4>
-                    <p class="text-center text-muted fs-7 mb-4">أسعار متوازنة تناسب احتياجاتك مع خصم خاص للباقة الشاملة</p>
+                    <p class="text-center text-muted fs-7 mb-4">أسعار متوازنة تناسب احتياجاتك</p>
                     
-                    <!-- عرض باقات الاشتراكات الثلاث -->
                     <div class="row g-3 mb-4">
                         <div class="col-md-4">
                             <div class="plan-card">
                                 <div class="plan-title text-info">🔹 الباقة العادية</div>
-                                <div class="mb-2">
-                                    <span class="plan-price">9</span> <small class="text-white">ريال / شهرياً</small>
-                                </div>
+                                <div class="mb-2"><span class="plan-price">9</span> <small class="text-white">ريال / شهرياً</small></div>
                                 <hr class="border-secondary my-2">
-                                <div class="feature-item">✔ تنزيل بدون حقوق المنصات</div>
+                                <div class="feature-item">✔ تنزيل بدون حقوق</div>
                                 <div class="feature-item">✔ دقة HD عالية</div>
-                                <div class="feature-item">✔ حد حجم الملف 50MB</div>
-                                <div class="feature-item">✔ أولوية معالجة عادية</div>
                             </div>
                         </div>
 
                         <div class="col-md-4">
                             <div class="plan-card">
                                 <div class="plan-title text-success">🔸 الباقة المتوسطة</div>
-                                <div class="mb-2">
-                                    <span class="plan-price">19</span> <small class="text-white">ريال / شهرياً</small>
-                                </div>
+                                <div class="mb-2"><span class="plan-price">19</span> <small class="text-white">ريال / شهرياً</small></div>
                                 <hr class="border-secondary my-2">
-                                <div class="feature-item">✔ دقة Full HD 1080p + 60FPS</div>
+                                <div class="feature-item">✔ Full HD 1080p</div>
                                 <div class="feature-item">✔ استخراج الصوت MP3</div>
-                                <div class="feature-item">✔ ترجمة نصوص تلقائية</div>
-                                <div class="feature-item">✔ حد حجم الملف 100MB</div>
-                                <div class="feature-item">✔ إزالة حقوق اسم البوت</div>
                             </div>
                         </div>
 
                         <div class="col-md-4">
                             <div class="plan-card featured">
                                 <div class="plan-badge">خصم 35% 🔥</div>
-                                <div class="plan-title text-warning">👑 الباقة الفاخرة (12 ميزة)</div>
+                                <div class="plan-title text-warning">👑 الباقة الفاخرة</div>
                                 <div class="mb-2">
                                     <span class="old-price">45 ريال</span>
                                     <span class="plan-price">29</span> <small class="text-white">ريال / شهرياً</small>
-                                    <div class="fs-7 text-warning fw-bold">(أو 79 ريال مدى الحياة)</div>
                                 </div>
                                 <hr class="border-warning my-2">
-                                <div class="feature-item">🌟 <b>تتضمن الـ 12 ميزة كاملة:</b></div>
-                                <div class="feature-item">• حجم 200MB + أولوية قصوى</div>
-                                <div class="feature-item">• توضيح خارق Ultra-HD 4K</div>
-                                <div class="feature-item">• إضافة لوجو + تعليق صوتي AI</div>
-                                <div class="feature-item">• تنزيل متعدد + دعم فني خاص</div>
+                                <div class="feature-item">🌟 الـ 12 ميزة كاملة + Ultra-HD 4K</div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- تفاصيل التحويل -->
                     <div class="p-3 mb-4 border border-warning rounded-3" style="background: rgba(241, 196, 15, 0.05);">
-                        <h6 class="fw-bold text-warning mb-2">💳 بيانات التحويل والدفع المباشر:</h6>
+                        <h6 class="fw-bold text-warning mb-2">💳 بيانات التحويل والدفع:</h6>
                         <p class="mb-1">📲 <b>STC Pay:</b> <code class="fs-6 text-white">{{ stc_pay }}</code></p>
-                        <p class="mb-0">🏦 <b>الآيبان البنكي:</b> <code class="fs-6 text-white">{{ iban }}</code></p>
+                        <p class="mb-0">🏦 <b>الآيبان:</b> <code class="fs-6 text-white">{{ iban }}</code></p>
                     </div>
 
-                    <!-- نموذج رفع الإيصال واختيار الباقة -->
                     <form id="vip-form" onsubmit="submitReceipt(event)">
                         <div class="mb-3">
-                            <label class="form-label fw-bold text-warning">📌 اختر الباقة التي قمت بتحويل مبلغها:</label>
+                            <label class="form-label fw-bold text-warning">📌 اختر الباقة:</label>
                             <select id="vip-plan" class="form-select" required>
                                 <option value="🔹 الباقة العادية (9 ريال / شهرياً)">🔹 الباقة العادية - 9 ريال / شهرياً</option>
                                 <option value="🔸 الباقة المتوسطة (19 ريال / شهرياً)">🔸 الباقة المتوسطة - 19 ريال / شهرياً</option>
-                                <option value="👑 الباقة الفاخرة (29 ريال / شهرياً)" selected>👑 الباقة الفاخرة - 29 ريال / شهرياً (خصم 35%)</option>
+                                <option value="👑 الباقة الفاخرة (29 ريال / شهرياً)" selected>👑 الباقة الفاخرة - 29 ريال / شهرياً</option>
                                 <option value="👑 الباقة الفاخرة مدى الحياة (79 ريال)">👑 الباقة الفاخرة - 79 ريال / مدى الحياة</option>
                             </select>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">معرف حسابك في تيليجرام (User ID أو اليوزر):</label>
+                            <label class="form-label">معرف حسابك في تيليجرام:</label>
                             <input type="text" id="vip-user-id" class="form-control" placeholder="مثال: @username أو 5310636822" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">البريد الإلكتروني أو رقم الجوال (لاستلام تأكيد الإيصال):</label>
-                            <input type="text" id="vip-contact" class="form-control" placeholder="example@email.com أو 05XXXXXXXX" required>
+                            <label class="form-label">البريد الإلكتروني / الجوال:</label>
+                            <input type="text" id="vip-contact" class="form-control" placeholder="إيميلك أو رقمك لاستلام الإيصال" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">صورة إيصال التحويل:</label>
+                            <label class="form-label">صورة الإيصال:</label>
                             <input type="file" id="vip-receipt" class="form-control" accept="image/*" required>
                         </div>
-                        <button type="submit" class="btn btn-warning w-100 fw-bold fs-6 py-2" id="btn-vip-sub">📤 إرسال الإيصال للتفعيل الفوري</button>
+                        <button type="submit" class="btn btn-warning w-100 fw-bold fs-6 py-2" id="btn-vip-sub">📤 إرسال الإيصال للتفعيل</button>
                     </form>
                     <div id="vip-status" class="mt-3 text-center"></div>
                 </div>
             </div>
         </div>
-
-        <div class="text-center my-3">
-            <a href="https://t.me/{{ bot_username if bot_username else '' }}" target="_blank" class="text-decoration-none text-success fw-bold">
-                🟢 فتح البوت مباشرة في تطبيق تيليجرام
-            </a>
-        </div>
     </div>
 
     <footer>
-        <p class="mb-0">جميع الحقوق محفوظة © 2026 | تطوير منصة VIP</p>
+        <p class="mb-0">جميع الحقوق محفوظة © 2026 | منصة VIP</p>
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -374,7 +327,7 @@ HTML_TEMPLATE = """
             const url = document.getElementById('dl-url').value;
             const status = document.getElementById('dl-status');
             if (!url) { alert('يرجى إدخال الرابط'); return; }
-            status.innerHTML = '<div class="spinner-border text-success"></div> <p class="mt-2 text-warning">جاري التنزيل والمعالجة...</p>';
+            status.innerHTML = '<div class="spinner-border text-success"></div> <p class="mt-2 text-warning">جاري التنزيل...</p>';
             try {
                 const res = await fetch('/api/web_download', {
                     method: 'POST',
@@ -383,11 +336,11 @@ HTML_TEMPLATE = """
                 });
                 const data = await res.json();
                 if (data.success) {
-                    status.innerHTML = `<a href="${data.url}" class="btn btn-success" download>✅ تنزيل الفيديو الموضح</a>`;
+                    status.innerHTML = `<a href="${data.url}" class="btn btn-success" download>✅ تنزيل الفيديو</a>`;
                 } else {
                     status.innerHTML = `<span class="text-danger">❌ ${data.error}</span>`;
                 }
-            } catch(e) { status.innerHTML = '<span class="text-danger">❌ حدث خطأ أثناء التنزيل.</span>'; }
+            } catch(e) { status.innerHTML = '<span class="text-danger">❌ حدث خطأ.</span>'; }
         }
 
         async function processEnhance() {
@@ -401,7 +354,7 @@ HTML_TEMPLATE = """
                 const res = await fetch('/api/web_enhance', { method: 'POST', body: formData });
                 const data = await res.json();
                 if (data.success) {
-                    status.innerHTML = `<video controls style="max-width:100%; border-radius:12px;" class="mb-2"><source src="${data.url}"></video><br><a href="${data.url}" class="btn btn-success" download>📥 تحميل الموضح</a>`;
+                    status.innerHTML = `<a href="${data.url}" class="btn btn-success" download>📥 تحميل الموضح</a>`;
                 } else { status.innerHTML = `<span class="text-danger">❌ ${data.error}</span>`; }
             } catch(e) { status.innerHTML = '<span class="text-danger">❌ تعذر التوضيح.</span>'; }
         }
@@ -424,18 +377,18 @@ HTML_TEMPLATE = """
             formData.append('receipt', fileInput.files[0]);
 
             btn.disabled = true;
-            status.innerHTML = '<div class="spinner-border text-warning"></div> <p class="mt-2 text-warning">جاري إرسال الإيصال وتأكيد الباقة...</p>';
+            status.innerHTML = '<div class="spinner-border text-warning"></div> <p class="mt-2 text-warning">جاري إرسال الإيصال...</p>';
 
             try {
                 const res = await fetch('/api/web_pay_receipt', { method: 'POST', body: formData });
                 const data = await res.json();
                 if (data.success) {
-                    status.innerHTML = '<div class="alert alert-success">✅ تم إرسال الإيصال والتفاصيل بنجاح! سيتم التحقق وتفعيل اشتراكك فوراً.</div>';
+                    status.innerHTML = '<div class="alert alert-success">✅ تم إرسال الإيصال بنجاح! سيتم التفعيل فوراً.</div>';
                 } else {
                     status.innerHTML = `<div class="alert alert-danger">❌ ${data.error}</div>`;
                 }
             } catch(e) {
-                status.innerHTML = '<div class="alert alert-danger">❌ حدث خطأ أثناء إرسال الإيصال.</div>';
+                status.innerHTML = '<div class="alert alert-danger">❌ حدث خطأ أثناء الإرسال.</div>';
             }
             btn.disabled = false;
         }
@@ -445,7 +398,7 @@ HTML_TEMPLATE = """
 """
 
 # ==========================================
-# 2. مسارات ومعالجات Flask
+# 2. مسارات Flask المعالجة بذاكرة خفيفة
 # ==========================================
 telegram_app_instance = None
 
@@ -471,12 +424,22 @@ def web_download():
         timestamp = int(time.time())
         out_name = f"web_dl_{timestamp}.mp4"
         out_path = os.path.join(UPLOAD_FOLDER, out_name)
-        ydl_opts = {'format': 'best', 'outtmpl': out_path, 'quiet': True}
+        
+        # خيارات معالجة منخفضة الذاكرة
+        ydl_opts = {
+            'format': 'best[filesize<40M]/best',
+            'outtmpl': out_path,
+            'quiet': True,
+            'no_warnings': True
+        }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl: ydl.download([url])
+        
         increment_stats()
+        gc.collect() # تفريغ الذاكرة
         return jsonify({'success': True, 'url': f'/uploads/{out_name}'})
     except Exception:
-        return jsonify({'success': False, 'error': 'فشل تنزيل المقطع من الرابط.'})
+        gc.collect()
+        return jsonify({'success': False, 'error': 'فشل تنزيل المقطع أو حجمه كبير جداً.'})
 
 @app.route('/api/web_enhance', methods=['POST'])
 def web_enhance():
@@ -487,15 +450,29 @@ def web_enhance():
     out_path = os.path.join(UPLOAD_FOLDER, f"out_{timestamp}.mp4")
     file.save(in_path)
     try:
-        filter_str = "scale=w='trunc(iw*1.3/2)*2':h='trunc(ih*1.3/2)*2':flags=bicubic,unsharp=3:3:1.0:3:3:0.0,eq=contrast=1.05:saturation=1.1"
-        cmd = ["ffmpeg", "-y", "-i", in_path, "-vf", filter_str, "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-c:a", "aac", out_path]
-        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        # تقييد الأنوية إلى 1 لمنع استهلاك RAM العالي في ffmpeg
+        filter_str = "scale=w='trunc(iw*1.2/2)*2':h='trunc(ih*1.2/2)*2':flags=bicubic,unsharp=3:3:0.8:3:3:0.0"
+        cmd = [
+            "ffmpeg", "-y", "-threads", "1", 
+            "-i", in_path, 
+            "-vf", filter_str, 
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "26", 
+            "-c:a", "aac", out_path
+        ]
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
+        
+        if os.path.exists(in_path): os.remove(in_path)
+        gc.collect() # تنظيف الذاكرة
+        
         if os.path.exists(out_path):
             increment_stats()
-            if os.path.exists(in_path): os.remove(in_path)
             return jsonify({'success': True, 'url': f'/uploads/out_{timestamp}.mp4'})
-    except Exception: pass
-    return jsonify({'success': False, 'error': 'فشلت معالجة الفيديو.'})
+    except Exception as e:
+        logger.error(f"Enhance error: {e}")
+    
+    if os.path.exists(in_path): os.remove(in_path)
+    gc.collect()
+    return jsonify({'success': False, 'error': 'فشلت المعالجة بسبب استهلاك الذاكرة.'})
 
 @app.route('/api/web_pay_receipt', methods=['POST'])
 def web_pay_receipt():
@@ -504,7 +481,7 @@ def web_pay_receipt():
     contact = request.form.get('contact', 'غير محدد')
     
     if 'receipt' not in request.files or not user_info:
-        return jsonify({'success': False, 'error': 'يرجى اختيار الباقة وكتابة المعرف وإرفاق الإيصال'})
+        return jsonify({'success': False, 'error': 'يرجى إكمال الحقول واختيار الإيصال'})
     
     file = request.files['receipt']
     timestamp = int(time.time())
@@ -512,26 +489,22 @@ def web_pay_receipt():
     receipt_path = os.path.join(RECEIPTS_FOLDER, receipt_filename)
     file.save(receipt_path)
 
-    # إرسال إشعار بريدي إذا كان معرف البريد الإلكتروني مكتوباً ومفعلاً
     if "@" in contact:
-        email_body = f"مرحباً،\n\nتم استلام إيصال التحويل الخاص بك بنجاح:\n- الباقة: {plan}\n- المعرف: {user_info}\n- وسيلة التواصل: {contact}\n\nسيتم مراجعة الطلب وتفعيل اشتراكك فوراً."
+        email_body = f"مرحباً،\n\nتم استلام إيصال التحويل الخاص بك بنجاح:\n- الباقة: {plan}\n- المعرف: {user_info}\n- التواصل: {contact}\n\nسيتم مراجعة الطلب وتفعيلك فوراً."
         send_email_receipt(contact, "استلام إيصال الاشتراك - منصة VIP", email_body, receipt_path)
 
-    # إرسال التفاصيل كاملة إلى الأدمن في تيليجرام
     if telegram_app_instance and ADMIN_ID:
         try:
-            keyboard = [
-                [
-                    InlineKeyboardButton("🟢 موافقة وتفعيل VIP", callback_data=f"approve_vip_{user_info}"),
-                    InlineKeyboardButton("🔴 رفض الطلب", callback_data=f"reject_vip_{user_info}")
-                ]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+            keyboard = [[
+                InlineKeyboardButton("🟢 موافقة وتفعيل VIP", callback_data=f"approve_vip_{user_info}"),
+                InlineKeyboardButton("🔴 رفض الطلب", callback_data=f"reject_vip_{user_info}")
+            ]]
             caption = (
-                f"💳 **إيصال تحويل واشتراك جديد من الموقع!**\n\n"
-                f"📦 **الباقة المختارة:** `{plan}`\n"
-                f"👤 **معرف العميل:** `{user_info}`\n"
-                f"📱 **البريد/الجوال:** `{contact}`\n"
+                f"💳 **إيصال تحويل جديد من الموقع!**\n\n"
+                f"📦 **الباقة:** `{plan}`\n"
+                f"👤 **المعرف:** `{user_info}`\n"
+                f"📱 **التواصل:** `{contact}`\n"
                 f"🕒 **التاريخ:** {time.strftime('%Y-%m-%d %H:%M')}"
             )
             
@@ -541,24 +514,28 @@ def web_pay_receipt():
                     photo=open(receipt_path, 'rb'),
                     caption=caption,
                     parse_mode="Markdown",
-                    reply_markup=reply_markup
+                    reply_markup=InlineKeyboardMarkup(keyboard)
                 ),
                 telegram_app_instance.loop
             )
+            gc.collect()
             return jsonify({'success': True})
         except Exception as e:
-            logger.error(f"Error sending receipt: {e}")
-            return jsonify({'success': False, 'error': 'تعذر إرسال الإيصال للأدمن حالياً.'})
+            logger.error(f"Error: {e}")
             
-    return jsonify({'success': False, 'error': 'السيرفر غير متصل بالبوت.'})
+    gc.collect()
+    return jsonify({'success': False, 'error': 'حدث خطأ أثناء معالجة الإيصال.'})
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
 # ==========================================
-# 3. أحداث وأوامر بوت تيليجرام
+# 3. بوت تيليجرام
 # ==========================================
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     db = load_db()
@@ -568,50 +545,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     vip_str = "🌟 مشترك VIP" if is_vip(user_id) else "👤 حساب مجاني"
     text = (
-        f"🇸🇦 **أهلاً بك في بوت الخدمة الشاملة للتحميل والتوضيح**\n\n"
+        f"🇸🇦 **أهلاً بك في البوت والمنصة الملكية**\n\n"
         f"حالة حسابك: **{vip_str}**\n\n"
         f"• أرسل رابط أي مقطع لتنزيله.\n"
-        f"• أرسل فيديو لتوضيحه وتنعيمه تلقائياً.\n"
-        f"• لتفعيل الاشتراك عبر كود استخدم: `/redeem الكود`"
+        f"• للتفعيل عبر كود: `/redeem الكود`"
     )
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⭐ تفاصيل الباقات والـ 12 ميزة (VIP)", callback_data="cmd_vip_info")],
+        [InlineKeyboardButton("⭐ تفاصيل الباقات والاشتراكات", callback_data="cmd_vip_info")],
         [InlineKeyboardButton("🚀 فتح موقع التحميل والدفع", url=WEB_SITE_URL)]
     ])
     await update.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
 
 async def vip_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    vip_str = "🌟 أنت مشترك بالفعل كـ VIP!" if is_vip(user_id) else "👤 حسابك حالياً مجاني."
-    
-    vip_text = (
-        f"👑 **خطط واشتراكات الـ VIP ({vip_str}):**\n\n"
-        f"🔹 **1. الباقة العادية:** **9 ريال** / شهرياً\n"
-        f"🔸 **2. الباقة المتوسطة:** **19 ريال** / شهرياً\n"
-        f"👑 **3. الباقة الفاخرة الشاملة (12 ميزة):** **29 ريال** / شهرياً *(أو 79 ريال مدى الحياة)*\n\n"
-        f"💳 **للدفع والتفعيل:** افتح رابط الموقع بالأسفل، اختار باقتك وارفع صورة الإيصال ليتم تفعيلك فوراً."
-    )
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("💳 الانتقال للموقع والدفع", url=WEB_SITE_URL)]
-    ])
+    vip_text = "💳 **للدفع والتفعيل:** افتح رابط الموقع بالأسفل، اختر باقتك وأرفق الإيصال ليتم تفعيلك مباشرة."
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("💳 الانتقال للموقع والدفع", url=WEB_SITE_URL)]])
     if update.callback_query:
         await update.callback_query.answer()
         await update.callback_query.edit_message_text(vip_text, reply_markup=kb, parse_mode="Markdown")
     else:
         await update.message.reply_text(vip_text, reply_markup=kb, parse_mode="Markdown")
 
-async def admin_make_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID: return
-    code = "VIP-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    db = load_db()
-    db.setdefault("codes", []).append(code)
-    save_db(db)
-    await update.message.reply_text(f"🎟️ **كود VIP جديد:**\n`{code}`", parse_mode="Markdown")
-
 async def user_redeem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if not context.args:
-        await update.message.reply_text("⚠️ اكتب الأمر متبوعاً بالكود، مثال:\n`/redeem VIP-XXXXXX`", parse_mode="Markdown")
+        await update.message.reply_text("⚠️ اكتب الأمر متبوعاً بالكود:\n`/redeem VIP-XXXXXX`", parse_mode="Markdown")
         return
     code = context.args[0].strip()
     db = load_db()
@@ -620,9 +577,9 @@ async def user_redeem(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user_id not in db.get("vips", []):
             db.setdefault("vips", []).append(user_id)
         save_db(db)
-        await update.message.reply_text("🎉 **تم تفعيل اشتراك VIP بحسابك بنجاح!** استمتع بالـ 12 ميزة الحصرية الآن.")
+        await update.message.reply_text("🎉 **تم تفعيل اشتراك VIP بحسابك بنجاح!**")
     else:
-        await update.message.reply_text("❌ الكود غير صحيح أو تم استخدامه سابقاً.")
+        await update.message.reply_text("❌ الكود غير صحيح أو مستخدم.")
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -632,56 +589,41 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     if data.startswith("approve_vip_"):
         user_info = data.replace("approve_vip_", "")
         db = load_db()
-        
         try:
             target_id = int(user_info)
             if target_id not in db.get("vips", []):
                 db.setdefault("vips", []).append(target_id)
                 save_db(db)
-            
             try:
-                await context.bot.send_message(
-                    chat_id=target_id,
-                    text="🎉 **تم اعتماد إيصال التحويل وتفعيل اشتراك VIP بحسابك بنجاح!**"
-                )
+                await context.bot.send_message(chat_id=target_id, text="🎉 **تم تفعيل اشتراك VIP بحسابك بنجاح!**")
             except Exception: pass
-        except ValueError:
-            pass
-
-        await query.edit_message_caption(caption=query.message.caption + "\n\n🟢 **تمت الموافقة وتفعيل الـ VIP للعميل بنجاح!**")
-
+        except ValueError: pass
+        await query.edit_message_caption(caption=query.message.caption + "\n\n🟢 **تم التفعيل بنجاح!**")
     elif data.startswith("reject_vip_"):
         await query.edit_message_caption(caption=query.message.caption + "\n\n🔴 **تم رفض الطلب.**")
 
-    elif data == "cmd_vip_info":
-        await vip_info_command(update, context)
-
 async def handle_media_or_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text or ""
-    
     if text.startswith("http"):
-        msg = await update.message.reply_text("⚡ جاري تنزيل المقطع...")
+        msg = await update.message.reply_text("⚡ جاري التحميل...")
         try:
-            ydl_opts = {'format': 'best', 'outtmpl': 'dl_vid.mp4', 'quiet': True}
+            ydl_opts = {'format': 'best[filesize<30M]/best', 'outtmpl': 'dl_vid.mp4', 'quiet': True}
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(text, download=True)
                 fn = ydl.prepare_filename(info)
             increment_stats()
             with open(fn, 'rb') as vf:
-                await update.message.reply_video(video=vf, caption="✅ تم التحميل بنجاح!")
+                await update.message.reply_video(video=vf, caption="✅ تم التحميل!")
             if os.path.exists(fn): os.remove(fn)
             await msg.delete()
         except Exception:
             await msg.edit_text("❌ تعذر تنزيل هذا الرابط.")
+        gc.collect()
     else:
         await start(update, context)
 
-# ==========================================
-# 4. بداية التشغيل الرئيسي
-# ==========================================
 def main():
     global telegram_app_instance
-    
     t = Thread(target=run_flask)
     t.daemon = True
     t.start()
@@ -693,12 +635,11 @@ def main():
 
     bot_app.add_handler(CommandHandler("start", start))
     bot_app.add_handler(CommandHandler("vip", vip_info_command))
-    bot_app.add_handler(CommandHandler("makecode", admin_make_code))
     bot_app.add_handler(CommandHandler("redeem", user_redeem))
     bot_app.add_handler(CallbackQueryHandler(admin_callback_handler))
     bot_app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_media_or_text))
 
-    print("🤖 السيرفر والموقع والبوت يعملون بنجاح...")
+    print("🤖 السيرفر يعمل بنجاح مع تحسينات الذاكرة...")
     bot_app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
