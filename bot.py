@@ -27,25 +27,28 @@ for folder in [UPLOAD_FOLDER, RECEIPTS_FOLDER]:
 DATA_FILE = "database.json"
 COUNTER_FILE = "stats.json"
 
-# جلب متغيرات البيئة من Render
+# جلب متغيرات البيئة من Render / Environment Variables
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 WEB_SITE_URL = os.getenv("WEB_SITE_URL", "https://ab-rbx9.onrender.com").rstrip('/')
 STC_PAY_NUM = os.getenv("STC_PAY_NUMBER", "لم يحدد")
 IBAN_NUM = os.getenv("IBAN_NUMBER", "لم يحدد")
 BOT_NAME = os.getenv("BOT_USERNAME", "")
+FORCE_CHANNEL = os.getenv("FORCE_CHANNEL", "")  # معرف القناة للاشتراك الإجباري مثل @channel
 
 SMTP_EMAIL = os.getenv("SMTP_EMAIL", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 
-# --- إدارة قاعدة البيانات ---
+# ==========================================
+# إدارة قاعدة البيانات والبيانات المحفوظة
+# ==========================================
 def load_db():
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception: pass
-    return {"users": [], "vips": [], "codes": [], "processed_payments": []}
+    return {"users": [], "vips": [], "codes": [], "banned": [], "processed_payments": []}
 
 def save_db(db):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -54,6 +57,10 @@ def save_db(db):
 def is_vip(user_id):
     db = load_db()
     return (user_id in db.get("vips", [])) or (user_id == ADMIN_ID)
+
+def is_banned(user_id):
+    db = load_db()
+    return user_id in db.get("banned", [])
 
 def increment_stats():
     stats = {"downloads": 0}
@@ -64,6 +71,13 @@ def increment_stats():
     stats["downloads"] = stats.get("downloads", 0) + 1
     with open(COUNTER_FILE, 'w') as f: json.dump(stats, f)
     return stats["downloads"]
+
+def get_stats_count():
+    if os.path.exists(COUNTER_FILE):
+        try:
+            with open(COUNTER_FILE, 'r') as f: return json.load(f).get("downloads", 0)
+        except Exception: pass
+    return 0
 
 def send_email_receipt(to_email, subject, body, attachment_path=None):
     if not SMTP_EMAIL or not SMTP_PASSWORD:
@@ -92,7 +106,7 @@ def send_email_receipt(to_email, subject, body, attachment_path=None):
 # 1. واجهة الموقع التفاعلي (Flask HTML)
 # ==========================================
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # حد أقصى 50MB لحماية الذاكرة
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -398,7 +412,7 @@ HTML_TEMPLATE = """
 """
 
 # ==========================================
-# 2. مسارات Flask المعالجة (تنزيل، توضيح، إيصالات، وWebhook الدفع الآلي)
+# 2. مسارات Flask المعالجة (تنزيل، توضيح، إيصالات، وWebhook الدفع)
 # ==========================================
 telegram_app_instance = None
 
@@ -543,12 +557,10 @@ def moyasar_webhook():
             target_id = int(telegram_user_id)
             db = load_db()
             
-            # منع تكرار معالجة العملية
             processed_payments = db.setdefault("processed_payments", [])
             if payment_id in processed_payments:
                 return jsonify({'status': 'already_processed'}), 200
 
-            # تفعيل الـ VIP للمستخدم تلقائياً
             vips = db.setdefault("vips", [])
             if target_id not in vips:
                 vips.append(target_id)
@@ -556,7 +568,6 @@ def moyasar_webhook():
             processed_payments.append(payment_id)
             save_db(db)
 
-            # إرسال رسالة تفعيل تلقائية للعميل
             if telegram_app_instance:
                 asyncio.run_coroutine_threadsafe(
                     telegram_app_instance.bot.send_message(
@@ -571,7 +582,6 @@ def moyasar_webhook():
                     telegram_app_instance.loop
                 )
 
-            # إشعار الأدمن بعملية الشراء
             if telegram_app_instance and ADMIN_ID:
                 asyncio.run_coroutine_threadsafe(
                     telegram_app_instance.bot.send_message(
@@ -607,20 +617,43 @@ def run_flask():
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
+async def check_force_sub(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    if not FORCE_CHANNEL or user_id == ADMIN_ID:
+        return True
+    try:
+        member = await context.bot.get_chat_member(chat_id=FORCE_CHANNEL, user_id=user_id)
+        if member.status in ['creator', 'administrator', 'member']:
+            return True
+    except Exception:
+        return True  # تجنب التعطيل إذا لم يكن البوت مشرفاً في القناة
+    return False
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    if is_banned(user_id):
+        await update.message.reply_text("❌ حسابك محظور من استخدام البوت.")
+        return
+
     db = load_db()
     if user_id not in db.get("users", []):
         db.setdefault("users", []).append(user_id)
         save_db(db)
 
+    if not await check_force_sub(user_id, context):
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("📢 الاشتراك في القناة", url=f"https://t.me/{FORCE_CHANNEL.replace('@', '')}")]])
+        await update.message.reply_text(f"⚠️ **عذراً، يجب عليك الاشتراك في القناة أولاً لاستخدام البوت:**\n{FORCE_CHANNEL}", reply_markup=kb, parse_mode="Markdown")
+        return
+
     vip_str = "🌟 مشترك VIP" if is_vip(user_id) else "👤 حساب مجاني"
     text = (
         f"🇸🇦 **أهلاً بك في البوت والمنصة الملكية**\n\n"
         f"حالة حسابك: **{vip_str}**\n\n"
-        f"• أرسل رابط أي مقطع لتنزيله.\n"
-        f"• للتفعيل عبر كود: `/redeem الكود`"
+        f"• أرسل رابط أي مقطع لتنزيله بصيغة (فيديو أو صوت MP3).\n"
+        f"• للتفعيل عبر كود: `/redeem الكود`\n"
     )
+    if user_id == ADMIN_ID:
+        text += "\n👑 **أوامر الأدمن:**\n`/stats` - الإحصائيات\n`/broadcast الرسالة` - إذاعة\n`/make_code العدد` - توليد أكواد VIP\n`/ban ID` - حظر\n`/unban ID` - فك حظر"
+
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("⭐ تفاصيل الباقات والاشتراكات", callback_data="cmd_vip_info")],
         [InlineKeyboardButton("🚀 فتح موقع التحميل والدفع", url=WEB_SITE_URL)]
@@ -652,6 +685,171 @@ async def user_redeem(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ الكود غير صحيح أو مستخدم.")
 
+# ==========================================
+# 5. لوحة تحكم الأدمن (Admin Commands)
+# ==========================================
+async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID: return
+    db = load_db()
+    total_users = len(db.get("users", []))
+    total_vips = len(db.get("vips", []))
+    total_codes = len(db.get("codes", []))
+    downloads = get_stats_count()
+    
+    msg = (
+        f"📊 **إحصائيات البوت والمنصة:**\n\n"
+        f"👤 إجمالي المستخدمين: `{total_users}`\n"
+        f"🌟 إجمالي مشتركي VIP: `{total_vips}`\n"
+        f"🔑 الأكواد المتاحة: `{total_codes}`\n"
+        f"📥 إجمالي التحميلات: `{downloads}`"
+    )
+    await update.message.reply_text(msg, parse_mode="Markdown")
+
+async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID: return
+    if not context.args and not update.message.reply_to_message:
+        await update.message.reply_text("⚠️ **الاستخدام:**\n`/broadcast نص الرسالة` أو قم بالرد على رسالة/صورة.")
+        return
+
+    db = load_db()
+    users = db.get("users", [])
+    success, failed = 0, 0
+    msg = await update.message.reply_text(f"⏳ جاري الإذاعة لـ {len(users)} مستخدم...")
+
+    for uid in users:
+        try:
+            if update.message.reply_to_message:
+                await update.message.reply_to_message.copy(chat_id=uid)
+            else:
+                text = " ".join(context.args)
+                await context.bot.send_message(chat_id=uid, text=text, parse_mode="Markdown")
+            success += 1
+            await asyncio.sleep(0.05)
+        except Exception:
+            failed += 1
+
+    await msg.edit_text(f"✅ **تمت الإذاعة بنجاح!**\n\n🟢 نجاح: `{success}`\n🔴 فشل: `{failed}`", parse_mode="Markdown")
+
+async def admin_make_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID: return
+    count = int(context.args[0]) if context.args and context.args[0].isdigit() else 1
+    
+    db = load_db()
+    new_codes = []
+    for _ in range(count):
+        code = f"VIP-{''.join(random.choices(string.ascii_uppercase + string.digits, k=8))}"
+        db.setdefault("codes", []).append(code)
+        new_codes.append(code)
+    save_db(db)
+
+    codes_text = "\n".join([f"`{c}`" for c in new_codes])
+    await update.message.reply_text(f"🎟️ **تم إنشاء {count} كود VIP بنجاح:**\n\n{codes_text}", parse_mode="Markdown")
+
+async def admin_ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID: return
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("⚠️ اكتب الأمر متبوعاً بأيدي المستخدم:\n`/ban 123456789`", parse_mode="Markdown")
+        return
+    target_id = int(context.args[0])
+    db = load_db()
+    if target_id not in db.setdefault("banned", []):
+        db["banned"].append(target_id)
+        save_db(db)
+        await update.message.reply_text(f"🚫 تم حظر المستخدم `{target_id}` بنجاح.", parse_mode="Markdown")
+
+async def admin_unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID: return
+    if not context.args or not context.args[0].isdigit():
+        await update.message.reply_text("⚠️ اكتب الأمر متبوعاً بأيدي المستخدم:\n`/unban 123456789`", parse_mode="Markdown")
+        return
+    target_id = int(context.args[0])
+    db = load_db()
+    if target_id in db.get("banned", []):
+        db["banned"].remove(target_id)
+        save_db(db)
+        await update.message.reply_text(f"✅ تم فك حظر المستخدم `{target_id}`.", parse_mode="Markdown")
+
+# ==========================================
+# 6. معالجة التحميل واختيار الصيغ (فيديو / MP3)
+# ==========================================
+async def handle_media_or_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if is_banned(user_id): return
+    if not await check_force_sub(user_id, context):
+        await start(update, context)
+        return
+
+    text = update.message.text or ""
+    if text.startswith("http"):
+        context.user_data['pending_url'] = text
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🎬 تحميل فيديو HD", callback_data="dl_format_video")],
+            [InlineKeyboardButton("🎵 استخراج صوت MP3", callback_data="dl_format_audio")]
+        ])
+        await update.message.reply_text("📌 **اختر صيغة التحميل المطلوبة:**", reply_markup=kb, parse_mode="Markdown")
+    else:
+        await start(update, context)
+
+async def download_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    data = query.data
+    user_id = query.from_user.id
+    await query.answer()
+
+    if data in ["dl_format_video", "dl_format_audio"]:
+        url = context.user_data.get('pending_url')
+        if not url:
+            await query.edit_message_text("❌ انتهت الجلسة، أرسل الرابط مرة أخرى.")
+            return
+
+        await query.edit_message_text("⚡ **جاري المعالجة والتحميل...**", parse_mode="Markdown")
+        timestamp = int(time.time())
+
+        try:
+            if data == "dl_format_video":
+                out_path = os.path.join(UPLOAD_FOLDER, f"dl_{timestamp}.mp4")
+                ydl_opts = {
+                    'format': 'best[filesize<40M]/best',
+                    'outtmpl': out_path,
+                    'quiet': True
+                }
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl: ydl.download([url])
+                
+                increment_stats()
+                with open(out_path, 'rb') as vf:
+                    await context.bot.send_video(chat_id=user_id, video=vf, caption="✅ **تم التحميل بنجاح!**", parse_mode="Markdown")
+                if os.path.exists(out_path): os.remove(out_path)
+
+            elif data == "dl_format_audio":
+                out_path = os.path.join(UPLOAD_FOLDER, f"dl_{timestamp}")
+                ydl_opts = {
+                    'format': 'bestaudio/best',
+                    'outtmpl': out_path,
+                    'postprocessors': [{
+                        'key': 'FFmpegExtractAudio',
+                        'preferredcodec': 'mp3',
+                        'preferredquality': '192',
+                    }],
+                    'quiet': True
+                }
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl: ydl.download([url])
+                final_mp3 = f"{out_path}.mp3"
+                
+                increment_stats()
+                with open(final_mp3, 'rb') as af:
+                    await context.bot.send_audio(chat_id=user_id, audio=af, caption="✅ **تم استخراج الصوت MP3 بنجاح!**", parse_mode="Markdown")
+                if os.path.exists(final_mp3): os.remove(final_mp3)
+
+            await query.delete_message()
+        except Exception as e:
+            logger.error(f"Download Error: {e}")
+            await query.edit_message_text("❌ تعذر تنزيل هذا الرابط أو حجم الملف كبير جداً.")
+        
+        gc.collect()
+
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data
@@ -673,28 +871,8 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     elif data.startswith("reject_vip_"):
         await query.edit_message_caption(caption=query.message.caption + "\n\n🔴 **تم رفض الطلب.**")
 
-async def handle_media_or_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text or ""
-    if text.startswith("http"):
-        msg = await update.message.reply_text("⚡ جاري التحميل...")
-        try:
-            ydl_opts = {'format': 'best[filesize<30M]/best', 'outtmpl': 'dl_vid.mp4', 'quiet': True}
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(text, download=True)
-                fn = ydl.prepare_filename(info)
-            increment_stats()
-            with open(fn, 'rb') as vf:
-                await update.message.reply_video(video=vf, caption="✅ تم التحميل!")
-            if os.path.exists(fn): os.remove(fn)
-            await msg.delete()
-        except Exception:
-            await msg.edit_text("❌ تعذر تنزيل هذا الرابط.")
-        gc.collect()
-    else:
-        await start(update, context)
-
 # ==========================================
-# 5. بداية التشغيل الرئيسي
+# 7. بداية التشغيل الرئيسي
 # ==========================================
 def main():
     global telegram_app_instance
@@ -707,13 +885,25 @@ def main():
     bot_app = Application.builder().token(TOKEN).build()
     telegram_app_instance = bot_app
 
+    # أوامر المستخدم العام
     bot_app.add_handler(CommandHandler("start", start))
     bot_app.add_handler(CommandHandler("vip", vip_info_command))
     bot_app.add_handler(CommandHandler("redeem", user_redeem))
-    bot_app.add_handler(CallbackQueryHandler(admin_callback_handler))
+    
+    # أوامر لوحة تحكم الأدمن
+    bot_app.add_handler(CommandHandler("stats", admin_stats))
+    bot_app.add_handler(CommandHandler("broadcast", admin_broadcast))
+    bot_app.add_handler(CommandHandler("make_code", admin_make_code))
+    bot_app.add_handler(CommandHandler("ban", admin_ban_user))
+    bot_app.add_handler(CommandHandler("unban", admin_unban_user))
+
+    # معالجات الأزرار والروابط
+    bot_app.add_handler(CallbackQueryHandler(download_callback_handler, pattern="^dl_format_"))
+    bot_app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(approve_vip_|reject_vip_)"))
+    bot_app.add_handler(CallbackQueryHandler(vip_info_command, pattern="^cmd_vip_info$"))
     bot_app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_media_or_text))
 
-    print("🤖 السيرفر والموقع والبوت والـ Webhook يعملون بنجاح...")
+    print("🤖 السيرفر والموقع والبوت ولوحة التحكم والـ Webhook يعملون بنجاح...")
     bot_app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
