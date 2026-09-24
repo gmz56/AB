@@ -84,7 +84,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>منصة VIP | التحميل والتوضيح 🇸🇦</title>
+    <title>منصة VIP | التحميل والاشتراكات 🇸🇦</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800;900&display=swap" rel="stylesheet">
     <style>
@@ -151,29 +151,54 @@ HTML_TEMPLATE = """
             padding: 12px 28px; border-radius: 12px; border: none;
         }
         .btn-green:hover { background: #146c43; color: white; }
-        .price-card {
+        
+        /* كروت الاشتراكات */
+        .plan-card {
             background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(241, 196, 15, 0.3);
-            border-radius: 15px;
-            padding: 15px;
-            text-align: center;
-            transition: 0.3s;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 16px;
+            padding: 20px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            transition: all 0.3s ease;
+            position: relative;
         }
-        .price-card:hover { border-color: #f1c40f; transform: translateY(-3px); }
-        .price-title { font-size: 1.1rem; font-weight: 800; color: #f1c40f; }
-        .price-val { font-size: 1.5rem; font-weight: 900; color: #fff; margin: 5px 0; }
-        .feature-item { font-size: 0.9rem; margin-bottom: 6px; }
+        .plan-card:hover { transform: translateY(-5px); }
+        .plan-card.featured {
+            background: rgba(241, 196, 15, 0.07);
+            border: 2px solid #f1c40f;
+            box-shadow: 0 0 20px rgba(241, 196, 15, 0.2);
+        }
+        .plan-badge {
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #f1c40f;
+            color: #000;
+            font-weight: 900;
+            font-size: 0.75rem;
+            padding: 4px 12px;
+            border-radius: 20px;
+        }
+        .plan-title { font-weight: 800; font-size: 1.2rem; margin-bottom: 5px; }
+        .old-price { text-decoration: line-through; color: #888; font-size: 0.9rem; margin-left: 5px; }
+        .plan-price { font-size: 1.8rem; font-weight: 900; color: #2ecc71; }
+        .plan-card.featured .plan-price { color: #f1c40f; }
+        .feature-item { font-size: 0.85rem; margin-bottom: 8px; color: #cbd5e0; }
+        
         footer { margin-top: auto; border-top: 1px solid rgba(255, 255, 255, 0.08); padding: 20px 0; text-align: center; color: #718096; }
     </style>
 </head>
 <body>
 
     <div class="container header-section">
-        <div class="brand-badge">👑 الباقة الملكية - VIP Access</div>
-        <h1 class="hero-title">منصة التحميل والاشتراك الفوري</h1>
+        <div class="brand-badge">👑 المنصة الملكية - VIP Access</div>
+        <h1 class="hero-title">خيارات الاشتراك والتحميل الفوري</h1>
     </div>
 
-    <div class="container col-lg-8">
+    <div class="container col-lg-9">
         <ul class="nav nav-pills justify-content-center mb-4" id="pills-tab">
             <li class="nav-item">
                 <button class="nav-link active" id="tab-download" data-bs-toggle="pill" data-bs-target="#content-download">📥 تحميل مقطع</button>
@@ -182,12 +207,12 @@ HTML_TEMPLATE = """
                 <button class="nav-link" id="tab-enhance" data-bs-toggle="pill" data-bs-target="#content-enhance">⚡ توضيح فيديو</button>
             </li>
             <li class="nav-item">
-                <button class="nav-link text-warning fw-bold" id="tab-vip" data-bs-toggle="pill" data-bs-target="#content-vip">⭐ باقات VIP والدفع</button>
+                <button class="nav-link text-warning fw-bold" id="tab-vip" data-bs-toggle="pill" data-bs-target="#content-vip">⭐ خطط الاشتراكات والدفع</button>
             </li>
         </ul>
 
         <div class="tab-content">
-            <!-- التحميل المجاني -->
+            <!-- التنزيل المجاني -->
             <div class="tab-pane fade show active" id="content-download">
                 <div class="tool-card">
                     <h4 class="fw-bold text-center mb-3">📥 تنزيل مقطع من الرابط</h4>
@@ -211,58 +236,68 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <!-- قسم VIP والأسعار ودفع الإيصالات -->
+            <!-- خطط الاشتراكات والدفع -->
             <div class="tab-pane fade" id="content-vip">
                 <div class="tool-card">
-                    <h4 class="fw-bold text-center text-warning mb-3">⭐ مميزات باقات اشتراك VIP</h4>
+                    <h4 class="fw-bold text-center text-warning mb-2">⭐ اختار باقة الاشتراك المناسبة لك</h4>
+                    <p class="text-center text-muted fs-7 mb-4">أسعار متوازنة تناسب احتياجاتك مع خصم خاص للباقة الشاملة</p>
                     
-                    <!-- عرض أسعار الاشتراكات -->
+                    <!-- عرض باقات الاشتراكات الثلاث -->
                     <div class="row g-3 mb-4">
+                        <!-- الباقة العادية -->
                         <div class="col-md-4">
-                            <div class="price-card">
-                                <div class="price-title">باقة اليوم</div>
-                                <div class="price-val">10 ريال</div>
-                                <div class="text-muted fs-7">تجربة سريعة لمدة 24 ساعة</div>
+                            <div class="plan-card">
+                                <div class="plan-title text-info">🔹 الباقة العادية</div>
+                                <div class="mb-2">
+                                    <span class="plan-price">9</span> <small class="text-white">ريال / شهرياً</small>
+                                </div>
+                                <hr class="border-secondary my-2">
+                                <div class="feature-item">✔ تنزيل بدون حقوق المنصات</div>
+                                <div class="feature-item">✔ دقة HD عالية</div>
+                                <div class="feature-item">✔ حد حجم الملف 50MB</div>
+                                <div class="feature-item">✔ أولوية معالجة عادية</div>
                             </div>
                         </div>
+
+                        <!-- الباقة المتوسطة -->
                         <div class="col-md-4">
-                            <div class="price-card border-warning">
-                                <div class="price-title">الباقة الشهريّة 🔥</div>
-                                <div class="price-val text-warning">25 ريال</div>
-                                <div class="text-muted fs-7">تفعيل كامل لمدة 30 يوم</div>
+                            <div class="plan-card">
+                                <div class="plan-title text-success">🔸 الباقة المتوسطة</div>
+                                <div class="mb-2">
+                                    <span class="plan-price">19</span> <small class="text-white">ريال / شهرياً</small>
+                                </div>
+                                <hr class="border-secondary my-2">
+                                <div class="feature-item">✔ دقة Full HD 1080p + 60FPS</div>
+                                <div class="feature-item">✔ استخراج الصوت MP3</div>
+                                <div class="feature-item">✔ ترجمة نصوص تلقائية</div>
+                                <div class="feature-item">✔ حد حجم الملف 100MB</div>
+                                <div class="feature-item">✔ إزالة حقوق اسم البوت</div>
                             </div>
                         </div>
+
+                        <!-- الباقة الفاخرة الشاملة (12 ميزة) -->
                         <div class="col-md-4">
-                            <div class="price-card">
-                                <div class="price-title">باقة مدى الحياة</div>
-                                <div class="price-val">99 ريال</div>
-                                <div class="text-muted fs-7">تفعيل دائم بلا حدود</div>
+                            <div class="plan-card featured">
+                                <div class="plan-badge">خصم 35% 🔥</div>
+                                <div class="plan-title text-warning">👑 الباقة الفاخرة (12 ميزة)</div>
+                                <div class="mb-2">
+                                    <span class="old-price">45 ريال</span>
+                                    <span class="plan-price">29</span> <small class="text-white">ريال / شهرياً</small>
+                                    <div class="fs-7 text-warning fw-bold">(أو 79 ريال مدى الحياة)</div>
+                                </div>
+                                <hr class="border-warning my-2">
+                                <div class="feature-item">🌟 <b>تتضمن الـ 12 ميزة كاملة:</b></div>
+                                <div class="feature-item">• حجم 200MB + أولوية قصوى</div>
+                                <div class="feature-item">• توضيح خارق Ultra-HD 4K</div>
+                                <div class="feature-item">• إضافة لوجو + تعليق صوتي AI</div>
+                                <div class="feature-item">• تنزيل متعدد + دعم فني خاص</div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- قائمة الـ 12 ميزة -->
-                    <div class="p-3 mb-4" style="background: rgba(0,0,0,0.3); border-radius:15px;">
-                        <h6 class="text-warning fw-bold mb-3">💎 تتضمن حزمة الـ VIP الميزات الـ 12 التالية:</h6>
-                        <div class="row">
-                            <div class="col-6 feature-item">1. 🚀 رفع الحجم إلى 100MB</div>
-                            <div class="col-6 feature-item">2. 🎬 إزالة حقوق المنصات</div>
-                            <div class="col-6 feature-item">3. ✨ جودة Ultra-HD و 60FPS</div>
-                            <div class="col-6 feature-item">4. 🎵 استخراج الصوت MP3</div>
-                            <div class="col-6 feature-item">5. 📝 ترجمة وكتابة تلقائية</div>
-                            <div class="col-6 feature-item">6. 🎙️ تعليق صوتي بالذكاء الاصطناعي</div>
-                            <div class="col-6 feature-item">7. 🖼️ إضافة لوجو خاص بك</div>
-                            <div class="col-6 feature-item">8. ⚡ أولوية سرعة المعالجة</div>
-                            <div class="col-6 feature-item">9. 📦 تحميل متعدد دفعة واحدة</div>
-                            <div class="col-6 feature-item">10. 🏷️ إزالة اسم حقوق البوت</div>
-                            <div class="col-6 feature-item">11. 🎴 بطاقات وتصاميم حصرية</div>
-                            <div class="col-6 feature-item">12. 👑 خدمة دعم فني مباشر</div>
-                        </div>
-                    </div>
-
-                    <!-- بيانات التحويل المباشر -->
+                    <!-- تفاصيل التحويل والتحقق -->
                     <div class="p-3 mb-4 border border-warning rounded-3" style="background: rgba(241, 196, 15, 0.05);">
-                        <h6 class="fw-bold text-warning mb-2">💳 طرق التحويل والدفع المباشر:</h6>
+                        <h6 class="fw-bold text-warning mb-2">💳 بيانات التحويل والدفع المباشر:</h6>
                         <p class="mb-1">📲 <b>STC Pay:</b> <code class="fs-6 text-white">{{ stc_pay }}</code></p>
                         <p class="mb-0">🏦 <b>الآيبان البنكي:</b> <code class="fs-6 text-white">{{ iban }}</code></p>
                     </div>
@@ -432,7 +467,7 @@ def web_pay_receipt():
     receipt_path = os.path.join(RECEIPTS_FOLDER, receipt_filename)
     file.save(receipt_path)
 
-    # إرسال صورة الإيصال إلى حساب الأدمن في تيليجرام مع زرين
+    # إرسال صورة الإيصال إلى حساب الأدمن في تيليجرام مع زرين للموافقة والرفض
     if telegram_app_instance and ADMIN_ID:
         try:
             keyboard = [
@@ -484,7 +519,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• لتفعيل الاشتراك عبر كود استخدم: `/redeem الكود`"
     )
     kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⭐ الـ 12 ميزة والباقات (VIP)", callback_data="cmd_vip_info")],
+        [InlineKeyboardButton("⭐ تفاصيل الباقات والـ 12 ميزة (VIP)", callback_data="cmd_vip_info")],
         [InlineKeyboardButton("🚀 فتح موقع التحميل والدفع", url=WEB_SITE_URL)]
     ])
     await update.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
@@ -494,25 +529,28 @@ async def vip_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     vip_str = "🌟 أنت مشترك بالفعل كـ VIP!" if is_vip(user_id) else "👤 حسابك حالياً مجاني."
     
     vip_text = (
-        f"👑 **باقات واشتراكات الـ VIP ({vip_str}):**\n\n"
-        f"💰 **الأسعار:**\n"
-        f"• باقة اليوم: **10 ريال**\n"
-        f"• الباقة الشهرية: **25 ريال**\n"
-        f"• باقة مدى الحياة: **99 ريال**\n\n"
-        f"💎 **حزمة الـ 12 ميزة كاملة:**\n"
-        f"1. معالجة ملفات ضخمة تصل إلى 100MB\n"
-        f"2. تنزيل بدون حقوق المنصات (تيك توك/انستقرام)\n"
-        f"3. توضيح وتنعيم فائقة Ultra-HD 60FPS\n"
+        f"👑 **خطط واشتراكات الـ VIP ({vip_str}):**\n\n"
+        f"🔹 **1. الباقة العادية:** **9 ريال** / شهرياً\n"
+        f"• تنزيل بدون حقوق + دقة HD + حد 50MB.\n\n"
+        f"🔸 **2. الباقة المتوسطة:** **19 ريال** / شهرياً\n"
+        f"• دقة 1080p + استخراج MP3 + ترجمة تلقائية + حد 100MB.\n\n"
+        f"👑 **3. الباقة الفاخرة الشاملة (12 ميزة كاملة):**\n"
+        f"• السعر الأصلي: ~~45 ريال~~\n"
+        f"• **السعر المخصّم:** **29 ريال** / شهرياً 🔥 *(أو 79 ريال مدى الحياة)*\n\n"
+        f"💎 **حزمة الـ 12 ميزة الشاملة تتضمن:**\n"
+        f"1. معالجة ملفات ضخمة تصل إلى 200MB\n"
+        f"2. تنزيل بدون حقوق المنصات نهائياً\n"
+        f"3. توضيح خارق Ultra-HD 4K & 60FPS\n"
         f"4. استخراج الصوت MP3 بضغطة زر\n"
         f"5. ترجمة وكتابة نصوص تلقائية على المقطع\n"
         f"6. تعليق صوتي واقعي بالذكاء الاصطناعي\n"
         f"7. دمج شعارك/اللوجو الخاص بك تلقائياً\n"
-        f"8. أولوية معالجة فائقة السرعة بدون طابور\n"
-        f"9. تحميل روابط متعددة دفعة واحدة\n"
+        f"8. أولوية معالجة قصوى بدون انتظار\n"
+        f"9. تحميل مقاطع متعددة دفعة واحدة\n"
         f"10. إزالة حقوق واسم البوت عن كافة الملفات\n"
         f"11. تصاميم وإطارات حصرية لمشتركي VIP\n"
-        f"12. دعم فني وأولوية معالجة دائمين\n\n"
-        f"💳 **للدفع والتفعيل:** افتح رابط الموقع بالأسفل واضغط على تبويب 'باقات VIP والدفع' لرفع صورة الإيصال."
+        f"12. دعم فني مباشر وأولوية معالجة دائمين\n\n"
+        f"💳 **للدفع والتفعيل:** افتح رابط الموقع بالأسفل واضغط على 'خطط الاشتراكات والدفع' لرفع صورة الإيصال."
     )
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("💳 الانتقال للموقع والدفع", url=WEB_SITE_URL)]
