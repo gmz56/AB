@@ -45,7 +45,7 @@ def load_db():
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception: pass
-    return {"users": [], "vips": [], "codes": []}
+    return {"users": [], "vips": [], "codes": [], "processed_payments": []}
 
 def save_db(db):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -92,7 +92,7 @@ def send_email_receipt(to_email, subject, body, attachment_path=None):
 # 1. واجهة الموقع التفاعلي (Flask HTML)
 # ==========================================
 app = Flask(__name__)
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # حد أقصى 50 ميجابايت لمنع نفاد الذاكرة
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # حد أقصى 50MB لحماية الذاكرة
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -244,7 +244,7 @@ HTML_TEMPLATE = """
             <div class="tab-pane fade" id="content-vip">
                 <div class="tool-card">
                     <h4 class="fw-bold text-center text-warning mb-2">⭐ اختار باقة الاشتراك المناسبة لك</h4>
-                    <p class="text-center text-muted fs-7 mb-4">أسعار متوازنة تناسب احتياجاتك</p>
+                    <p class="text-center text-muted fs-7 mb-4">تفعيل آلي فور التحويل والدفع</p>
                     
                     <div class="row g-3 mb-4">
                         <div class="col-md-4">
@@ -298,8 +298,8 @@ HTML_TEMPLATE = """
                             </select>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">معرف حسابك في تيليجرام:</label>
-                            <input type="text" id="vip-user-id" class="form-control" placeholder="مثال: @username أو 5310636822" required>
+                            <label class="form-label">معرف حسابك في تيليجرام (ID):</label>
+                            <input type="text" id="vip-user-id" class="form-control" placeholder="مثال: 5310636822" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">البريد الإلكتروني / الجوال:</label>
@@ -398,7 +398,7 @@ HTML_TEMPLATE = """
 """
 
 # ==========================================
-# 2. مسارات Flask المعالجة بذاكرة خفيفة
+# 2. مسارات Flask المعالجة (تنزيل، توضيح، إيصالات، وWebhook الدفع الآلي)
 # ==========================================
 telegram_app_instance = None
 
@@ -425,7 +425,6 @@ def web_download():
         out_name = f"web_dl_{timestamp}.mp4"
         out_path = os.path.join(UPLOAD_FOLDER, out_name)
         
-        # خيارات معالجة منخفضة الذاكرة
         ydl_opts = {
             'format': 'best[filesize<40M]/best',
             'outtmpl': out_path,
@@ -435,7 +434,7 @@ def web_download():
         with yt_dlp.YoutubeDL(ydl_opts) as ydl: ydl.download([url])
         
         increment_stats()
-        gc.collect() # تفريغ الذاكرة
+        gc.collect()
         return jsonify({'success': True, 'url': f'/uploads/{out_name}'})
     except Exception:
         gc.collect()
@@ -450,7 +449,6 @@ def web_enhance():
     out_path = os.path.join(UPLOAD_FOLDER, f"out_{timestamp}.mp4")
     file.save(in_path)
     try:
-        # تقييد الأنوية إلى 1 لمنع استهلاك RAM العالي في ffmpeg
         filter_str = "scale=w='trunc(iw*1.2/2)*2':h='trunc(ih*1.2/2)*2':flags=bicubic,unsharp=3:3:0.8:3:3:0.0"
         cmd = [
             "ffmpeg", "-y", "-threads", "1", 
@@ -462,7 +460,7 @@ def web_enhance():
         subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
         
         if os.path.exists(in_path): os.remove(in_path)
-        gc.collect() # تنظيف الذاكرة
+        gc.collect()
         
         if os.path.exists(out_path):
             increment_stats()
@@ -526,12 +524,85 @@ def web_pay_receipt():
     gc.collect()
     return jsonify({'success': False, 'error': 'حدث خطأ أثناء معالجة الإيصال.'})
 
+# =========================================================
+# 3. مسار استقبال إشعار الدفع التلقائي (Moyasar Webhook)
+# =========================================================
+@app.route('/api/payment_webhook/moyasar', methods=['POST'])
+def moyasar_webhook():
+    try:
+        data = request.json or {}
+        
+        payment_id = data.get('id')
+        status = data.get('status')
+        metadata = data.get('metadata', {})
+        
+        telegram_user_id = metadata.get('telegram_user')
+        plan_name = metadata.get('plan', 'باقة VIP')
+
+        if status == 'paid' and telegram_user_id:
+            target_id = int(telegram_user_id)
+            db = load_db()
+            
+            # منع تكرار معالجة العملية
+            processed_payments = db.setdefault("processed_payments", [])
+            if payment_id in processed_payments:
+                return jsonify({'status': 'already_processed'}), 200
+
+            # تفعيل الـ VIP للمستخدم تلقائياً
+            vips = db.setdefault("vips", [])
+            if target_id not in vips:
+                vips.append(target_id)
+            
+            processed_payments.append(payment_id)
+            save_db(db)
+
+            # إرسال رسالة تفعيل تلقائية للعميل
+            if telegram_app_instance:
+                asyncio.run_coroutine_threadsafe(
+                    telegram_app_instance.bot.send_message(
+                        chat_id=target_id,
+                        text=(
+                            f"🎉 **تم تفعيل اشتراكك تلقائياً!**\n\n"
+                            f"✅ شكراً لك، تم استلام المبلغ وتفعيل **{plan_name}** بنجاح.\n"
+                            f"استمتع الآن بكافة ميزات الـ VIP بدون حدود! 🚀"
+                        ),
+                        parse_mode="Markdown"
+                    ),
+                    telegram_app_instance.loop
+                )
+
+            # إشعار الأدمن بعملية الشراء
+            if telegram_app_instance and ADMIN_ID:
+                asyncio.run_coroutine_threadsafe(
+                    telegram_app_instance.bot.send_message(
+                        chat_id=ADMIN_ID,
+                        text=(
+                            f"💰 **عملية شراء جديدة وتفعيل تلقائي!**\n\n"
+                            f"👤 العميل: `{target_id}`\n"
+                            f"📦 الباقة: `{plan_name}`\n"
+                            f"🆔 رقم العملية: `{payment_id}`\n"
+                            f"✅ الحالة: مدفوع وتم التفعيل."
+                        ),
+                        parse_mode="Markdown"
+                    ),
+                    telegram_app_instance.loop
+                )
+
+            gc.collect()
+            return jsonify({'status': 'success'}), 200
+
+        return jsonify({'status': 'ignored_or_unpaid'}), 200
+
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
 # ==========================================
-# 3. بوت تيليجرام
+# 4. أحداث وأوامر بوت تيليجرام
 # ==========================================
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
@@ -557,7 +628,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
 
 async def vip_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    vip_text = "💳 **للدفع والتفعيل:** افتح رابط الموقع بالأسفل، اختر باقتك وأرفق الإيصال ليتم تفعيلك مباشرة."
+    vip_text = "💳 **للدفع والتفعيل:** افتح رابط الموقع بالأسفل، اختر باقتك وادفع إلكترونياً أو أرفق الإيصال ليتم تفعيلك مباشرة."
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("💳 الانتقال للموقع والدفع", url=WEB_SITE_URL)]])
     if update.callback_query:
         await update.callback_query.answer()
@@ -622,6 +693,9 @@ async def handle_media_or_text(update: Update, context: ContextTypes.DEFAULT_TYP
     else:
         await start(update, context)
 
+# ==========================================
+# 5. بداية التشغيل الرئيسي
+# ==========================================
 def main():
     global telegram_app_instance
     t = Thread(target=run_flask)
@@ -639,7 +713,7 @@ def main():
     bot_app.add_handler(CallbackQueryHandler(admin_callback_handler))
     bot_app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_media_or_text))
 
-    print("🤖 السيرفر يعمل بنجاح مع تحسينات الذاكرة...")
+    print("🤖 السيرفر والموقع والبوت والـ Webhook يعملون بنجاح...")
     bot_app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
