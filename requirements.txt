@@ -1,5 +1,3 @@
-Flask
-gunicorn
+flask
 python-telegram-bot
-yt-dlp
 requests
